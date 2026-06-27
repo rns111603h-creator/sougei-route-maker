@@ -34,10 +34,32 @@
           <h2>出発・帰着の場所</h2>
           <label class="field-label" for="facility-address">事業所の住所</label>
           <input id="facility-address" type="text" autocomplete="street-address" placeholder="例：沖縄県名護市東江1-1-1">
+          <div class="location-tools">
+            <button type="button" id="save-current-location" class="small-button">現在地を事業所として保存</button>
+            <button type="button" id="use-saved-location" class="small-button">保存した事業所位置を使う</button>
+            <button type="button" id="clear-saved-location" class="small-button ghost-button">保存位置を削除</button>
+          </div>
+          <p id="location-status" class="mini-status">保存した事業所位置はありません。</p>
           <label class="checkbox-line" for="return-to-start">
             <input type="checkbox" id="return-to-start" checked>
             <span>最後に事業所へ戻る（周回ルート）</span>
           </label>
+        </div>
+
+        <div class="panel">
+          <div class="section-kicker"><span></span>時刻</div>
+          <h2>到着予定の計算</h2>
+          <div class="time-grid">
+            <div>
+              <label class="field-label" for="departure-time">出発時刻</label>
+              <input id="departure-time" type="time">
+            </div>
+            <div>
+              <label class="field-label" for="stop-minutes">1件あたり停車時間</label>
+              <input id="stop-minutes" type="number" min="0" max="60" step="1" value="5">
+            </div>
+          </div>
+          <p class="mini-status">道路距離と走行時間はOSRMの目安です。渋滞や信号待ちは反映されません。</p>
         </div>
 
         <div class="panel">
@@ -85,12 +107,17 @@
             </div>
             <div class="summary-item">
               <div id="summary-distance" class="summary-value">0 km</div>
-              <div class="summary-label">概算距離</div>
+              <div class="summary-label">道路距離の目安</div>
+            </div>
+            <div class="summary-item">
+              <div id="summary-duration" class="summary-value">--</div>
+              <div class="summary-label">走行時間の目安</div>
             </div>
           </div>
-          <p class="distance-note">距離は直線ベースの目安です。実際の道のり・所要時間・渋滞はGoogleマップで確認してください。</p>
+          <p class="distance-note">道路距離・走行時間はOSRMによる目安です。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。</p>
 
           <ol id="route-list" class="route-list"></ol>
+          <div id="schedule" class="schedule-panel"></div>
           <div id="failed-addresses" class="failed-addresses" role="alert"></div>
 
           <div class="result-actions">
@@ -103,7 +130,7 @@
 
     <footer class="app-footer">
       <strong>個人情報は保存しません。</strong>
-      入力内容はブラウザ内でのみ使います。住所は緯度経度へ変換する時だけOpenStreetMap Nominatimへ送信されます。氏名は送信されません。
+      入力内容はブラウザ内でのみ使います。住所は緯度経度へ変換する時だけOpenStreetMap Nominatimへ送信されます。道路時間の計算では座標をOSRMへ送信します。氏名は送信されません。現在地保存を使う場合、事業所の座標はこの端末のブラウザ内だけに保存されます。
     </footer>
 
     <section id="print-sheet" aria-label="印刷用ルート表">
@@ -120,6 +147,7 @@
             <th class="print-order">順</th>
             <th>立ち寄り先</th>
             <th>住所</th>
+            <th>予定時刻</th>
           </tr>
         </thead>
         <tbody id="print-body"></tbody>

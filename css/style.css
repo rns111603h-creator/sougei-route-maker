@@ -242,6 +242,17 @@ input[type="text"] {
   background: #fff;
 }
 
+input[type="time"],
+input[type="number"] {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #fff;
+}
+
 input[type="text"]::placeholder {
   color: #95a2a5;
 }
@@ -250,6 +261,65 @@ input[type="text"]:focus {
   outline: 0;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+input[type="time"]:focus,
+input[type="number"]:focus {
+  outline: 0;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.location-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.small-button {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--primary-dark);
+  background: var(--primary-soft);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.small-button:hover {
+  background: #d9eee9;
+}
+
+.ghost-button {
+  color: var(--muted);
+  background: #fff;
+}
+
+.ghost-button:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.mini-status {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.mini-status.is-ready {
+  color: var(--primary-dark);
+}
+
+.mini-status.is-error {
+  color: var(--danger);
+}
+
+.time-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
 }
 
 .checkbox-line {
@@ -467,7 +537,7 @@ input[type="text"]:focus {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-top: 14px;
 }
@@ -543,6 +613,70 @@ input[type="text"]:focus {
   display: block;
   color: var(--muted);
   font-size: 0.84rem;
+}
+
+.route-meta {
+  display: block;
+  margin-top: 3px;
+  color: var(--primary-dark);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.schedule-panel {
+  display: none;
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.schedule-panel.is-visible {
+  display: block;
+}
+
+.schedule-panel h3 {
+  margin: 0;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fbfa;
+  font-size: 0.95rem;
+}
+
+.schedule-table-wrap {
+  overflow-x: auto;
+}
+
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+}
+
+.schedule-table th,
+.schedule-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.84rem;
+}
+
+.schedule-table th {
+  color: var(--muted);
+  background: #fbfdfc;
+  font-size: 0.76rem;
+}
+
+.schedule-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.schedule-empty {
+  margin: 0;
+  padding: 12px 13px;
+  color: var(--danger);
+  font-size: 0.86rem;
 }
 
 .result-actions {
@@ -687,6 +821,11 @@ input[type="text"]:focus {
 
   .summary-grid,
   .result-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .location-tools,
+  .time-grid {
     grid-template-columns: 1fr;
   }
 }
