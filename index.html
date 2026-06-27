@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>送迎ルートメーカー</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQn7WnS3p6Qcg4B8YH3yiylUj3r8h2w=" crossorigin="">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へ移動</a>
+  <header class="site-header">
+    <div>
+      <p class="eyebrow">静的Webアプリ</p>
+      <h1>送迎ルートメーカー</h1>
+      <p>住所を入力すると、ブラウザ内で送迎順を計算し、地図・Googleマップ・印刷用ルート表を作成します。</p>
+    </div>
+  </header>
+
+  <main id="main" class="layout">
+    <section class="panel form-panel" aria-labelledby="input-title">
+      <div class="section-heading">
+        <h2 id="input-title">入力</h2>
+        <p>入力内容は保存されません。住所検索時のみ OpenStreetMap Nominatim に送信されます。</p>
+      </div>
+
+      <form id="route-form">
+        <fieldset class="card">
+          <legend>基本設定</legend>
+          <label for="route-type">送迎区分</label>
+          <select id="route-type" name="routeType">
+            <option value="お迎え">お迎え</option>
+            <option value="お送り">お送り</option>
+          </select>
+
+          <label for="office-address">事業所住所（出発地）</label>
+          <input id="office-address" name="officeAddress" type="text" autocomplete="street-address" required placeholder="例：東京都千代田区千代田1-1">
+
+          <label class="checkbox-row" for="return-to-office">
+            <input id="return-to-office" type="checkbox" checked>
+            <span>最後に事業所へ戻る（周回ルート）</span>
+          </label>
+        </fieldset>
+
+        <fieldset class="card">
+          <legend>立ち寄り先</legend>
+          <div class="table-wrap">
+            <table class="stops-table">
+              <thead><tr><th>名前</th><th>住所</th><th>操作</th></tr></thead>
+              <tbody id="stops-body"></tbody>
+            </table>
+          </div>
+          <div class="button-row">
+            <button type="button" id="add-stop" class="secondary">行を追加</button>
+            <button type="button" id="sample-data" class="ghost">サンプル入力</button>
+          </div>
+        </fieldset>
+
+        <div class="button-row sticky-actions">
+          <button type="submit" id="calculate">ルートを計算する</button>
+          <button type="button" id="open-google" class="secondary" disabled>Googleマップで開く</button>
+          <button type="button" id="print-route" class="secondary" disabled>ルート表を印刷</button>
+        </div>
+      </form>
+
+      <div id="status" class="status" role="status" aria-live="polite">住所を入力して「ルートを計算する」を押してください。</div>
+    </section>
+
+    <section class="panel map-panel" aria-labelledby="map-title">
+      <div class="section-heading">
+        <h2 id="map-title">地図</h2>
+        <p>距離は緯度経度から算出した直線ベースの概算です。実際の道路距離・所要時間とは異なります。</p>
+      </div>
+      <div id="map" aria-label="計算した送迎ルートの地図"></div>
+    </section>
+
+    <section class="panel results-panel" aria-labelledby="result-title">
+      <div class="section-heading">
+        <h2 id="result-title">計算結果</h2>
+        <p id="summary">未計算です。</p>
+      </div>
+      <ol id="result-list" class="result-list"></ol>
+    </section>
+  </main>
+
+  <section id="print-sheet" class="print-sheet" aria-label="印刷用ルート表">
+    <h2 id="print-title">送迎ルート表</h2>
+    <div class="print-meta">
+      <span>日付：　　　　年　　月　　日</span>
+      <span>運転者：　　　　　　　　　</span>
+      <span>車両：　　　　　　　　　</span>
+    </div>
+    <table>
+      <thead><tr><th>確認</th><th>順番</th><th>名前</th><th>住所</th></tr></thead>
+      <tbody id="print-body"></tbody>
+    </table>
+  </section>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
