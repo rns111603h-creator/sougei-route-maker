@@ -895,7 +895,7 @@
       : points;
 
     window.L.polyline(linePoints, {
-      color: "#d86f2a",
+      color: "#1a73e8",
       weight: 4,
       opacity: 0.86,
       dashArray: roadRoute ? null : "2 8",
