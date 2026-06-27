@@ -4,6 +4,7 @@
   const GEOCODE_DELAY_MS = 1100;
   const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
   const OSRM_ROUTE_ENDPOINT = "https://router.project-osrm.org/route/v1/driving";
+  const OSRM_TABLE_ENDPOINT = "https://router.project-osrm.org/table/v1/driving";
   const SAVED_FACILITY_KEY = "sougeiRouteMaker.savedFacilityLocation";
 
   const state = {
@@ -117,6 +118,68 @@
     return path.slice(1, returnToStart ? path.length - 1 : path.length);
   }
 
+  function optimizeRouteByDurationMatrix(durationMatrix, points, returnToStart) {
+    const remaining = points.map((point, index) => ({ point, matrixIndex: index + 1 }));
+    const ordered = [];
+    let currentIndex = 0;
+
+    while (remaining.length > 0) {
+      let bestIndex = 0;
+      let bestDuration = Infinity;
+      remaining.forEach((candidate, index) => {
+        const duration = getMatrixDuration(durationMatrix, currentIndex, candidate.matrixIndex);
+        if (duration < bestDuration) {
+          bestDuration = duration;
+          bestIndex = index;
+        }
+      });
+      const next = remaining.splice(bestIndex, 1)[0];
+      ordered.push(next);
+      currentIndex = next.matrixIndex;
+    }
+
+    const path = [0, ...ordered.map((item) => item.matrixIndex), ...(returnToStart ? [0] : [])];
+    let improved = true;
+    while (improved) {
+      improved = false;
+      let bestCandidatePath = null;
+      let bestCandidateDuration = routeDurationByMatrixPath(durationMatrix, path);
+      const lastReversibleIndex = returnToStart ? path.length - 2 : path.length - 1;
+      for (let i = 1; i < lastReversibleIndex; i += 1) {
+        for (let k = i + 1; k <= lastReversibleIndex; k += 1) {
+          const candidatePath = path.slice();
+          reverseSegment(candidatePath, i, k);
+          const after = routeDurationByMatrixPath(durationMatrix, candidatePath);
+          if (bestCandidateDuration > after + 1e-9) {
+            bestCandidatePath = candidatePath;
+            bestCandidateDuration = after;
+          }
+        }
+      }
+      if (bestCandidatePath) {
+        path.splice(0, path.length, ...bestCandidatePath);
+        improved = true;
+      }
+    }
+
+    return path
+      .filter((matrixIndex) => matrixIndex > 0)
+      .map((matrixIndex) => points[matrixIndex - 1]);
+  }
+
+  function getMatrixDuration(durationMatrix, fromIndex, toIndex) {
+    const duration = durationMatrix[fromIndex] && durationMatrix[fromIndex][toIndex];
+    return Number.isFinite(duration) ? duration : Infinity;
+  }
+
+  function routeDurationByMatrixPath(durationMatrix, path) {
+    let total = 0;
+    for (let index = 0; index < path.length - 1; index += 1) {
+      total += getMatrixDuration(durationMatrix, path[index], path[index + 1]);
+    }
+    return total;
+  }
+
   function reverseSegment(path, start, end) {
     let left = start;
     let right = end;
@@ -183,6 +246,43 @@
     return `${OSRM_ROUTE_ENDPOINT}/${coordinates}?${params.toString()}`;
   }
 
+  function buildOsrmTableUrl(points) {
+    const coordinates = points
+      .map((point) => `${point.lng.toFixed(6)},${point.lat.toFixed(6)}`)
+      .join(";");
+    const params = new URLSearchParams({
+      annotations: "duration"
+    });
+    return `${OSRM_TABLE_ENDPOINT}/${coordinates}?${params.toString()}`;
+  }
+
+  async function fetchDurationMatrix(points) {
+    if (points.length < 2) {
+      return null;
+    }
+    const response = await window.fetch(buildOsrmTableUrl(points), {
+      headers: { "Accept": "application/json" }
+    });
+    if (!response.ok) {
+      throw new Error("osrm_table_network_error");
+    }
+    const data = await response.json();
+    if (!Array.isArray(data.durations) || data.durations.length !== points.length) {
+      throw new Error("osrm_table_invalid_response");
+    }
+    data.durations.forEach((row) => {
+      if (!Array.isArray(row) || row.length !== points.length) {
+        throw new Error("osrm_table_invalid_row");
+      }
+      row.forEach((duration) => {
+        if (!Number.isFinite(duration)) {
+          throw new Error("osrm_table_unreachable_point");
+        }
+      });
+    });
+    return data.durations;
+  }
+
   async function fetchRoadRoute(points) {
     if (points.length < 2) {
       return null;
@@ -243,6 +343,28 @@
     return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
   }
 
+  function buildDurationEstimateRoute(facility, ordered, returnToStart, durationMatrix) {
+    const pathIndexes = [0, ...ordered.map((stop) => stop.matrixIndex), ...(returnToStart ? [0] : [])];
+    const legs = [];
+    let totalDurationSeconds = 0;
+    for (let index = 0; index < pathIndexes.length - 1; index += 1) {
+      const durationSeconds = getMatrixDuration(durationMatrix, pathIndexes[index], pathIndexes[index + 1]);
+      legs.push({
+        durationSeconds,
+        distanceMeters: null
+      });
+      totalDurationSeconds += durationSeconds;
+    }
+    return {
+      distanceMeters: null,
+      durationSeconds: totalDurationSeconds,
+      legs,
+      geometry: null,
+      isDurationMatrixEstimate: true,
+      straightLineDistanceKm: routeDistance(facility, ordered, returnToStart)
+    };
+  }
+
   function init() {
     cacheElements();
     if (!hasRequiredElements()) {
@@ -279,6 +401,7 @@
     elements.summaryStopCount = document.getElementById("summary-stop-count");
     elements.summaryDistance = document.getElementById("summary-distance");
     elements.summaryDuration = document.getElementById("summary-duration");
+    elements.distanceNote = document.getElementById("distance-note");
     elements.routeList = document.getElementById("route-list");
     elements.schedule = document.getElementById("schedule");
     elements.failedAddresses = document.getElementById("failed-addresses");
@@ -313,7 +436,7 @@
     elements.stopsKicker.textContent = mode === "pickup" ? "お迎えする利用者" : "お送りする利用者";
     if (state.lastRoute) {
       renderPrintSheet(state.lastRoute.facilityAddress, state.lastRoute.ordered, state.lastRoute.returnToStart, state.lastRoute.schedule || []);
-      elements.resultTitle.textContent = `${mode === "pickup" ? "お迎え" : "お送り"}の最適ルート`;
+      elements.resultTitle.textContent = `${mode === "pickup" ? "お迎え" : "お送り"}の時間優先ルート`;
     }
   }
 
@@ -373,7 +496,7 @@
       return;
     }
     state.useSavedFacilityLocation = true;
-    updateLocationStatus("この計算では保存した事業所位置を出発・帰着地として使います。");
+    updateLocationStatus("住所欄が空の時、保存した事業所位置を出発・帰着地として使います。");
   }
 
   function clearSavedFacilityLocation() {
@@ -432,7 +555,8 @@
 
   async function calculateRoute() {
     const facilityAddress = elements.facilityAddress.value.trim();
-    const facilityLabel = facilityAddress || "保存した事業所位置";
+    const useSavedFacility = !facilityAddress && state.useSavedFacilityLocation && state.savedFacilityLocation;
+    const facilityLabel = useSavedFacility ? "保存した事業所位置" : facilityAddress;
     const activeStops = state.stops
       .map((stop) => ({ ...stop, name: stop.name.trim(), address: stop.address.trim() }))
       .filter((stop) => stop.address.length > 0);
@@ -440,7 +564,7 @@
     hideFormMessage();
     clearAddressErrors();
 
-    if (!facilityAddress && !state.useSavedFacilityLocation) {
+    if (!facilityAddress && !useSavedFacility) {
       showFormMessage("事業所の住所を入力するか、保存した事業所位置を使ってください。");
       elements.facilityAddress.focus();
       return;
@@ -454,11 +578,14 @@
     setBusy(true);
     try {
       setProgressText("事業所の場所を調べています...");
-      const facility = await resolveFacilityLocation(facilityAddress);
+      const facility = await resolveFacilityLocation(facilityAddress, useSavedFacility);
       if (!facility) {
         showFormMessage("事業所の住所が見つかりませんでした。市町村名や番地を確認してください。");
         elements.facilityAddress.focus();
         return;
+      }
+      if (!useSavedFacility && activeStops.length > 0) {
+        await sleep(GEOCODE_DELAY_MS);
       }
 
       const foundStops = [];
@@ -474,7 +601,7 @@
         }
 
         if (location) {
-          foundStops.push({ ...stop, lat: location.lat, lng: location.lng });
+          foundStops.push({ ...stop, lat: location.lat, lng: location.lng, matrixIndex: foundStops.length + 1 });
         } else {
           failedStops.push(stop);
           markAddressError(stop.id);
@@ -491,16 +618,26 @@
       }
 
       const returnToStart = elements.returnToStart.checked;
-      const ordered = optimizeRoute(facility, foundStops, returnToStart);
+      let durationMatrix = null;
+      let ordered = null;
+      let optimizationMode = "duration";
+      try {
+        setProgressText("道路時間を比較しています...");
+        durationMatrix = await fetchDurationMatrix([facility, ...foundStops]);
+        ordered = optimizeRouteByDurationMatrix(durationMatrix, foundStops, returnToStart);
+      } catch (error) {
+        optimizationMode = "straight-line";
+        ordered = optimizeRoute(facility, foundStops, returnToStart);
+      }
       setProgressText("道路ルートと走行時間を調べています...");
       const pathPoints = buildRoutePath(facility, ordered, returnToStart);
       let roadRoute = null;
       try {
         roadRoute = await fetchRoadRoute(pathPoints);
       } catch (error) {
-        roadRoute = null;
+        roadRoute = durationMatrix ? buildDurationEstimateRoute(facility, ordered, returnToStart, durationMatrix) : null;
       }
-      renderResult(facility, facilityLabel, ordered, returnToStart, failedStops, roadRoute);
+      renderResult(facility, facilityLabel, ordered, returnToStart, failedStops, roadRoute, optimizationMode);
     } catch (error) {
       showFormMessage("ルートを計算できませんでした。通信環境を確認して、もう一度お試しください。");
     } finally {
@@ -508,8 +645,8 @@
     }
   }
 
-  async function resolveFacilityLocation(facilityAddress) {
-    if (state.useSavedFacilityLocation && state.savedFacilityLocation) {
+  async function resolveFacilityLocation(facilityAddress, useSavedFacility) {
+    if (useSavedFacility && state.savedFacilityLocation) {
       return {
         lat: state.savedFacilityLocation.lat,
         lng: state.savedFacilityLocation.lng
@@ -568,19 +705,20 @@
     }
   }
 
-  function renderResult(facility, facilityAddress, ordered, returnToStart, failedStops, roadRoute) {
+  function renderResult(facility, facilityAddress, ordered, returnToStart, failedStops, roadRoute, optimizationMode) {
     const departureTime = elements.departureTime.value;
     const stopMinutes = Number.parseInt(elements.stopMinutes.value, 10) || 0;
     const schedule = roadRoute ? buildArrivalSchedule(departureTime, roadRoute.legs, stopMinutes) : [];
-    state.lastRoute = { facility, facilityAddress, ordered, returnToStart, roadRoute, schedule };
+    state.lastRoute = { facility, facilityAddress, ordered, returnToStart, roadRoute, schedule, optimizationMode };
     elements.placeholder.hidden = true;
     elements.result.hidden = false;
-    elements.resultTitle.textContent = `${state.mode === "pickup" ? "お迎え" : "お送り"}の最適ルート`;
+    elements.resultTitle.textContent = `${state.mode === "pickup" ? "お迎え" : "お送り"}の時間優先ルート`;
     elements.summaryStopCount.textContent = String(ordered.length);
-    elements.summaryDistance.textContent = roadRoute
+    elements.summaryDistance.textContent = roadRoute && Number.isFinite(roadRoute.distanceMeters)
       ? formatDistanceMeters(roadRoute.distanceMeters)
       : `${routeDistance(facility, ordered, returnToStart).toFixed(1)} km`;
     elements.summaryDuration.textContent = roadRoute ? formatDuration(roadRoute.durationSeconds) : "--";
+    renderDistanceNote(roadRoute, optimizationMode);
 
     renderRouteList(facilityAddress, ordered, returnToStart, roadRoute, schedule);
     renderSchedule(facilityAddress, ordered, returnToStart, roadRoute, schedule, departureTime, stopMinutes);
@@ -589,6 +727,18 @@
     renderMap(facility, ordered, returnToStart, roadRoute);
     renderPrintSheet(facilityAddress, ordered, returnToStart, schedule);
     elements.result.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function renderDistanceNote(roadRoute, optimizationMode) {
+    if (optimizationMode === "straight-line") {
+      elements.distanceNote.textContent = "OSRMの道路時間を取得できなかったため、直線距離を使って順番を計算しています。実際の走行時間はGoogleマップや現場判断で確認してください。";
+      return;
+    }
+    if (roadRoute && roadRoute.isDurationMatrixEstimate) {
+      elements.distanceNote.textContent = "順番と走行時間はOSRMの道路時間をもとにした目安です。地図線と距離は直線ベースの表示です。渋滞、信号待ち、乗降介助時間は反映されません。";
+      return;
+    }
+    elements.distanceNote.textContent = "順番・道路距離・走行時間はOSRMによる目安です。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。";
   }
 
   function renderRouteList(facilityAddress, ordered, returnToStart, roadRoute, schedule) {
@@ -797,6 +947,8 @@
     optimizeRoute,
     buildGoogleMapsUrl,
     buildOsrmRouteUrl,
+    buildOsrmTableUrl,
+    optimizeRouteByDurationMatrix,
     buildArrivalSchedule,
     formatDuration,
     formatDistanceMeters

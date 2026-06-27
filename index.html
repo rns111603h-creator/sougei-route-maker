@@ -97,7 +97,7 @@
 
         <div id="result" class="panel result-panel" hidden>
           <div class="section-kicker"><span></span>計算結果</div>
-          <h2 id="result-title">最適な送迎ルート</h2>
+          <h2 id="result-title">時間優先の送迎ルート</h2>
           <div id="map" aria-label="送迎ルートの地図"></div>
 
           <div class="summary-grid">
@@ -107,14 +107,14 @@
             </div>
             <div class="summary-item">
               <div id="summary-distance" class="summary-value">0 km</div>
-              <div class="summary-label">道路距離の目安</div>
+              <div class="summary-label">距離の目安</div>
             </div>
             <div class="summary-item">
               <div id="summary-duration" class="summary-value">--</div>
               <div class="summary-label">走行時間の目安</div>
             </div>
           </div>
-          <p class="distance-note">道路距離・走行時間はOSRMによる目安です。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。</p>
+          <p id="distance-note" class="distance-note">道路時間をもとに、始発から終着までの走行時間が短くなる順番を計算します。</p>
 
           <ol id="route-list" class="route-list"></ol>
           <div id="schedule" class="schedule-panel"></div>
