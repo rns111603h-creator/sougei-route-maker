@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="福祉事業所向けの送迎ルート作成ツール。住所から巡回順をブラウザ内で計算し、Googleマップのナビ起動と印刷用ルート表を作成します。">
+  <title>送迎ルートメーカー</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <span class="brand-route"></span>
+          <span class="brand-pin"></span>
+        </div>
+        <div>
+          <h1>送迎ルートメーカー</h1>
+          <p>住所を入れて巡回順を計算し、そのままGoogleマップと印刷用ルート表へ。</p>
+        </div>
+      </div>
+      <div class="mode-switch" role="group" aria-label="送迎の種類">
+        <button type="button" id="mode-pickup" class="mode-button is-active" aria-pressed="true">お迎え</button>
+        <button type="button" id="mode-dropoff" class="mode-button" aria-pressed="false">お送り</button>
+      </div>
+    </header>
+
+    <main class="workbench">
+      <section class="input-column" aria-label="ルート条件の入力">
+        <div class="panel">
+          <div class="section-kicker"><span></span>事業所</div>
+          <h2>出発・帰着の場所</h2>
+          <label class="field-label" for="facility-address">事業所の住所</label>
+          <input id="facility-address" type="text" autocomplete="street-address" placeholder="例：沖縄県名護市東江1-1-1">
+          <label class="checkbox-line" for="return-to-start">
+            <input type="checkbox" id="return-to-start" checked>
+            <span>最後に事業所へ戻る（周回ルート）</span>
+          </label>
+        </div>
+
+        <div class="panel">
+          <div class="section-kicker"><span></span><span id="stops-kicker">お迎えする利用者</span></div>
+          <div class="section-heading">
+            <h2>立ち寄り先</h2>
+            <p>名前と住所を行ごとに入力します。</p>
+          </div>
+          <div id="stops" class="stops-list" aria-live="polite"></div>
+          <button type="button" id="add-stop" class="secondary-button">立ち寄り先を追加</button>
+
+          <button type="button" id="calculate-route" class="primary-button">
+            <span class="button-route-icon" aria-hidden="true"></span>
+            <span id="calculate-label">ルートを計算する</span>
+          </button>
+          <div id="progress" class="progress" role="status" aria-live="polite" aria-atomic="true">
+            <span class="spinner" aria-hidden="true"></span>
+            <span id="progress-text">住所を調べています...</span>
+          </div>
+          <div id="form-message" class="form-message" role="alert"></div>
+        </div>
+      </section>
+
+      <section class="result-column" aria-label="計算結果">
+        <div id="placeholder" class="panel placeholder">
+          <div class="section-kicker"><span></span>使い方</div>
+          <h2>3ステップでルート表まで作れます</h2>
+          <ol>
+            <li><strong>事業所の住所</strong>を入力します。</li>
+            <li><strong>利用者の名前と住所</strong>を追加します。</li>
+            <li><strong>ルートを計算する</strong>を押します。</li>
+          </ol>
+          <p>結果欄に地図、巡回順、概算距離、Googleマップ起動リンク、印刷用ルート表が表示されます。</p>
+        </div>
+
+        <div id="result" class="panel result-panel" hidden>
+          <div class="section-kicker"><span></span>計算結果</div>
+          <h2 id="result-title">最適な送迎ルート</h2>
+          <div id="map" aria-label="送迎ルートの地図"></div>
+
+          <div class="summary-grid">
+            <div class="summary-item">
+              <div id="summary-stop-count" class="summary-value">0</div>
+              <div class="summary-label">立ち寄り件数</div>
+            </div>
+            <div class="summary-item">
+              <div id="summary-distance" class="summary-value">0 km</div>
+              <div class="summary-label">概算距離</div>
+            </div>
+          </div>
+          <p class="distance-note">距離は直線ベースの目安です。実際の道のり・所要時間・渋滞はGoogleマップで確認してください。</p>
+
+          <ol id="route-list" class="route-list"></ol>
+          <div id="failed-addresses" class="failed-addresses" role="alert"></div>
+
+          <div class="result-actions">
+            <a id="google-map-link" class="map-button" href="#" target="_blank" rel="noopener">Googleマップで開く</a>
+            <button type="button" id="print-route" class="print-button">ルート表を印刷</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <strong>個人情報は保存しません。</strong>
+      入力内容はブラウザ内でのみ使います。住所は緯度経度へ変換する時だけOpenStreetMap Nominatimへ送信されます。氏名は送信されません。
+    </footer>
+
+    <section id="print-sheet" aria-label="印刷用ルート表">
+      <h2 id="print-title">送迎ルート表</h2>
+      <div class="print-meta">
+        <div>日付：<span></span></div>
+        <div>運転者：<span></span></div>
+        <div>車両：<span></span></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th class="print-check">済</th>
+            <th class="print-order">順</th>
+            <th>立ち寄り先</th>
+            <th>住所</th>
+          </tr>
+        </thead>
+        <tbody id="print-body"></tbody>
+      </table>
+      <p id="print-note"></p>
+    </section>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
