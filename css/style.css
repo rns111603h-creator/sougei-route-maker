@@ -1369,6 +1369,17 @@ input[type="number"]:focus {
     display: block;
   }
 
+  .print-day-date {
+    font-size: 9pt;
+    font-weight: 700;
+  }
+
+  .print-day-weekday {
+    margin-top: 1px;
+    font-size: 8pt;
+    font-weight: 600;
+  }
+
   .print-holiday-name {
     margin-top: 1px;
     font-size: 5.8pt;

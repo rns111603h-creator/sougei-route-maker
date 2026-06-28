@@ -1852,9 +1852,9 @@
     if (day.isHoliday) {
       classes.push("is-holiday");
     }
-    const dayNumber = day.day ? String(day.day) : "";
+    const dayNumber = day.dateLabel || (day.day ? String(day.day) : "");
     const holidayLabel = day.holidayName ? `<span class="print-holiday-name">${escapeHtml(day.holidayName)}</span>` : "";
-    return `<th class="${classes.join(" ")}"><span>${escapeHtml(day.weekday)}</span><span>${escapeHtml(dayNumber)}</span>${holidayLabel}</th>`;
+    return `<th class="${classes.join(" ")}"><span class="print-day-date">${escapeHtml(dayNumber)}</span><span class="print-day-weekday">${escapeHtml(day.weekday)}</span>${holidayLabel}</th>`;
   }
 
   function buildPrintUsageCell(stop, day, isFirstRow) {
@@ -1873,7 +1873,7 @@
     if (!day.day) {
       return "";
     }
-    if (isStopRestOnDay(stop, day.day)) {
+    if (!day.isOutsideMonth && isStopRestOnDay(stop, day.day)) {
       return isFirstRow ? "<span class=\"print-rest-mark\">休</span>" : "";
     }
     return "<span class=\"print-check-frame\"><span></span><span></span><span></span></span>";
@@ -1890,12 +1890,14 @@
     return Array.from({ length: 5 }, (_, index) => {
       const date = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + index);
       const inTargetMonth = date.getFullYear() === year && date.getMonth() + 1 === month;
-      const holidayName = inTargetMonth ? getJapaneseHolidayName(date) : "";
+      const holidayName = getJapaneseHolidayName(date);
       return {
         year: date.getFullYear(),
         month: date.getMonth() + 1,
-        day: inTargetMonth ? date.getDate() : null,
+        day: date.getDate(),
+        dateLabel: `${date.getMonth() + 1}/${date.getDate()}`,
         weekday: ["日", "月", "火", "水", "木", "金", "土"][date.getDay()],
+        isOutsideMonth: !inTargetMonth,
         isHoliday: Boolean(holidayName),
         holidayName
       };

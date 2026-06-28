@@ -81,15 +81,20 @@ assert.strictEqual(utils.isStopRestOnDay({ restDays: [1, 3, 5] }, 4), false, "un
 
 const firstWeek = utils.getCoursePrintWeek({ targetMonth: "2026-04", targetDate: "2026-04-03" });
 assert.strictEqual(
-  JSON.stringify(firstWeek.map((day) => ({ weekday: day.weekday, day: day.day }))),
+  JSON.stringify(firstWeek.map((day) => ({
+    dateLabel: day.dateLabel,
+    weekday: day.weekday,
+    day: day.day,
+    isOutsideMonth: day.isOutsideMonth
+  }))),
   JSON.stringify([
-    { weekday: "月", day: null },
-    { weekday: "火", day: null },
-    { weekday: "水", day: 1 },
-    { weekday: "木", day: 2 },
-    { weekday: "金", day: 3 }
+    { dateLabel: "3/30", weekday: "月", day: 30, isOutsideMonth: true },
+    { dateLabel: "3/31", weekday: "火", day: 31, isOutsideMonth: true },
+    { dateLabel: "4/1", weekday: "水", day: 1, isOutsideMonth: false },
+    { dateLabel: "4/2", weekday: "木", day: 2, isOutsideMonth: false },
+    { dateLabel: "4/3", weekday: "金", day: 3, isOutsideMonth: false }
   ]),
-  "print week should show only the selected month days within the Monday-Friday block"
+  "print week should show dates for the Monday-Friday block, excluding weekends"
 );
 assert.strictEqual(utils.getJapaneseHolidayName(new Date(2026, 4, 5)), "こどもの日", "Japanese holidays should be marked for print");
 assert.strictEqual(utils.getJapaneseHolidayName(new Date(2026, 4, 6)), "振替休日", "substitute holidays should be marked for print");
