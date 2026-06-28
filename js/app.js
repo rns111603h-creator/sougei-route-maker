@@ -56,14 +56,12 @@
     return course;
   }
 
-  function createStop(course, name = "", place = "", address = "", service = "", scheduledTime = "", restDays = []) {
+  function createStop(course, name = "", place = "", address = "", restDays = []) {
     const stop = {
       id: `${course.id}-stop-${course.nextId}`,
       name,
-      service,
       place,
       address,
-      scheduledTime,
       restDays: normalizeRestDays(restDays),
       lat: null,
       lng: null
@@ -149,10 +147,8 @@
         targetDate: String(course.targetDate || "").trim(),
         stops: course.stops.map((stop) => ({
           name: String(stop.name || "").trim(),
-          service: String(stop.service || "").trim(),
           place: String(stop.place || "").trim(),
           address: String(stop.address || "").trim(),
-          scheduledTime: String(stop.scheduledTime || "").trim(),
           restDays: normalizeRestDays(stop.restDays)
         }))
       }))
@@ -180,8 +176,6 @@
             String(storedStop.name || "").trim(),
             String(storedStop.place || "").trim(),
             String(storedStop.address || "").trim(),
-            String(storedStop.service || "").trim(),
-            String(storedStop.scheduledTime || "").trim(),
             normalizeRestDays(storedStop.restDays)
           ));
         });
@@ -930,9 +924,9 @@
     updateLocationStatus("保存した事業所位置を削除しました。");
   }
 
-  function addStop(name = "", place = "", address = "", service = "", scheduledTime = "", restDays = []) {
+  function addStop(name = "", place = "", address = "", restDays = []) {
     const course = getActiveCourse();
-    course.stops.push(createStop(course, name, place, address, service, scheduledTime, restDays));
+    course.stops.push(createStop(course, name, place, address, restDays));
     renderStops();
   }
 
@@ -956,10 +950,8 @@
       row.innerHTML = `
         <div class="stop-number">${index + 1}</div>
         <input class="stop-name" type="text" value="${escapeHtml(stop.name)}" placeholder="お名前" aria-label="${index + 1}番目の名前">
-        <input class="stop-service" type="text" value="${escapeHtml(stop.service)}" placeholder="サービス" aria-label="${index + 1}番目のサービス種別">
         <input class="stop-place" type="text" value="${escapeHtml(stop.place)}" placeholder="場所名・施設名" aria-label="${index + 1}番目の場所名または施設名">
         <input class="stop-address" type="text" value="${escapeHtml(stop.address)}" placeholder="住所（市町村から）" aria-label="${index + 1}番目の住所">
-        <input class="stop-time" type="time" value="${escapeHtml(stop.scheduledTime)}" aria-label="${index + 1}番目の予定時刻">
         <button class="delete-stop" type="button" aria-label="${index + 1}番目の立ち寄り先を削除">×</button>
         <details class="rest-days">
           <summary>${escapeHtml(buildRestSummary(stop))}</summary>
@@ -973,9 +965,6 @@
       row.querySelector(".stop-name").addEventListener("input", (event) => {
         stop.name = event.target.value;
       });
-      row.querySelector(".stop-service").addEventListener("input", (event) => {
-        stop.service = event.target.value;
-      });
       row.querySelector(".stop-place").addEventListener("input", (event) => {
         stop.place = event.target.value;
         clearRowError(row);
@@ -983,9 +972,6 @@
       row.querySelector(".stop-address").addEventListener("input", (event) => {
         stop.address = event.target.value;
         clearRowError(row);
-      });
-      row.querySelector(".stop-time").addEventListener("input", (event) => {
-        stop.scheduledTime = event.target.value;
       });
       row.querySelectorAll(".rest-day-checkbox").forEach((checkbox) => {
         checkbox.addEventListener("change", () => {
@@ -1035,10 +1021,8 @@
       .map((stop) => ({
         ...stop,
         name: stop.name.trim(),
-        service: String(stop.service || "").trim(),
         place: stop.place.trim(),
         address: stop.address.trim(),
-        scheduledTime: String(stop.scheduledTime || "").trim(),
         restDays: normalizeRestDays(stop.restDays)
       }))
       .filter((stop) => buildStopSearchQueries(stop).length > 0 && !(targetDay && isStopRestOnDay(stop, targetDay)));
@@ -1468,14 +1452,14 @@
   }
 
   function courseHasPrintableStops(course) {
-    return course.stops.some((stop) => String(stop.name || stop.place || stop.address || stop.service || "").trim());
+    return course.stops.some((stop) => String(stop.name || stop.place || stop.address || "").trim());
   }
 
   function buildPrintCoursePage(course, route) {
     const printDays = getCoursePrintDays(course);
     const routeStops = Array.isArray(route && route.ordered) && route.ordered.length > 0
       ? route.ordered
-      : course.stops.filter((stop) => String(stop.name || stop.place || stop.address || stop.service || "").trim());
+      : course.stops.filter((stop) => String(stop.name || stop.place || stop.address || "").trim());
     const routeSchedule = Array.isArray(route && route.schedule) ? route.schedule : [];
     const rows = routeStops.map((stop, index) => buildAttendancePrintRow(stop, index, printDays, routeSchedule[index])).join("");
     const startTime = elements.departureTime.value || "";
@@ -1499,12 +1483,13 @@
               <tr>
                 <th class="print-order">順</th>
                 <th class="print-name">利用者</th>
-                <th class="print-service">サービス</th>
-                <th class="print-place">場所・予定時刻</th>
+                <th class="print-place">場所</th>
+                <th class="print-address">住所</th>
+                <th class="print-time">予定時刻</th>
                 ${printDays.map((day) => `<th class="print-day">${day}</th>`).join("")}
               </tr>
             </thead>
-            <tbody>${rows || `<tr><td colspan="${printDays.length + 4}">利用者情報がありません。</td></tr>`}</tbody>
+            <tbody>${rows || `<tr><td colspan="${printDays.length + 5}">利用者情報がありません。</td></tr>`}</tbody>
           </table>
         </div>
         <p class="print-note">□は送迎予定、休は休み予定です。順番と時刻は道路ルートをもとにした目安です。道路状況や安全確認を優先してください。</p>
@@ -1513,14 +1498,14 @@
   }
 
   function buildAttendancePrintRow(stop, index, printDays, scheduleItem) {
-    const plannedTime = scheduleItem && scheduleItem.arrivalTime ? scheduleItem.arrivalTime : stop.scheduledTime || "";
-    const placeParts = [getStopDisplayName(stop), getStopAddressLabel(stop)].filter(Boolean);
+    const plannedTime = scheduleItem && scheduleItem.arrivalTime ? scheduleItem.arrivalTime : "";
     return `
       <tr>
         <td class="print-order">${index + 1}</td>
-        <td class="print-name">${escapeHtml(stop.name || getStopDisplayName(stop))}</td>
-        <td class="print-service">${escapeHtml(stop.service || "")}</td>
-        <td class="print-place">${escapeHtml(placeParts.join(" / "))}${plannedTime ? `<br><strong>${escapeHtml(plannedTime)}</strong>` : ""}</td>
+        <td class="print-name">${escapeHtml(stop.name || "")}</td>
+        <td class="print-place">${escapeHtml(String(stop.place || "").trim())}</td>
+        <td class="print-address">${escapeHtml(getStopAddressLabel(stop))}</td>
+        <td class="print-time">${escapeHtml(plannedTime)}</td>
         ${printDays.map((day) => `<td class="print-day">${isStopRestOnDay(stop, day) ? "休" : "□"}</td>`).join("")}
       </tr>
     `;

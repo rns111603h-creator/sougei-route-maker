@@ -31,8 +31,8 @@ assert.strictEqual(courses[0].targetMonth, "", "course target month should start
 assert.strictEqual(courses[0].targetDate, "", "course target date should start empty");
 assert.strictEqual(courses[0].stops.length, 3, "each course should start with three blank stop rows");
 assert.notStrictEqual(courses[0].stops[0].id, courses[1].stops[0].id, "stop ids should be unique across courses");
-assert.strictEqual(courses[0].stops[0].service, "", "stop service should start empty");
-assert.strictEqual(courses[0].stops[0].scheduledTime, "", "stop scheduled time should start empty");
+assert.strictEqual(courses[0].stops[0].service, undefined, "stop service should not be part of the route input");
+assert.strictEqual(courses[0].stops[0].scheduledTime, undefined, "manual scheduled time should not be part of the route input");
 assert.strictEqual(JSON.stringify(courses[0].stops[0].restDays), JSON.stringify([]), "stop rest days should start empty");
 
 courses[0].stops[0].name = "Aさん";
@@ -89,10 +89,8 @@ courses[0].contact = "090-0000-0000";
 courses[0].targetMonth = "2026-04";
 courses[0].targetDate = "2026-04-03";
 courses[0].stops[0].name = "利用者A";
-courses[0].stops[0].service = "生訓";
 courses[0].stops[0].place = "那覇空港";
 courses[0].stops[0].address = "沖縄県那覇市鏡水150";
-courses[0].stops[0].scheduledTime = "08:30";
 courses[0].stops[0].restDays = [3, 10];
 courses[0].lastRoute = { shouldNotBeSaved: true };
 const savedPayload = utils.serializeCoursesForStorage(courses);
@@ -101,9 +99,9 @@ assert.strictEqual(savedPayload.courses[0].name, "1号車");
 assert.strictEqual(savedPayload.courses[0].contact, "090-0000-0000");
 assert.strictEqual(savedPayload.courses[0].targetMonth, "2026-04");
 assert.strictEqual(savedPayload.courses[0].targetDate, "2026-04-03");
-assert.strictEqual(savedPayload.courses[0].stops[0].service, "生訓");
+assert.strictEqual(savedPayload.courses[0].stops[0].service, undefined);
 assert.strictEqual(savedPayload.courses[0].stops[0].place, "那覇空港");
-assert.strictEqual(savedPayload.courses[0].stops[0].scheduledTime, "08:30");
+assert.strictEqual(savedPayload.courses[0].stops[0].scheduledTime, undefined);
 assert.strictEqual(JSON.stringify(savedPayload.courses[0].stops[0].restDays), JSON.stringify([3, 10]));
 assert.strictEqual(savedPayload.courses[0].lastRoute, undefined, "calculated route results should not be stored");
 
@@ -114,10 +112,10 @@ assert.strictEqual(restoredCourses[0].contact, "090-0000-0000");
 assert.strictEqual(restoredCourses[0].targetMonth, "2026-04");
 assert.strictEqual(restoredCourses[0].targetDate, "2026-04-03");
 assert.strictEqual(restoredCourses[0].stops[0].name, "利用者A");
-assert.strictEqual(restoredCourses[0].stops[0].service, "生訓");
+assert.strictEqual(restoredCourses[0].stops[0].service, undefined);
 assert.strictEqual(restoredCourses[0].stops[0].place, "那覇空港");
 assert.strictEqual(restoredCourses[0].stops[0].address, "沖縄県那覇市鏡水150");
-assert.strictEqual(restoredCourses[0].stops[0].scheduledTime, "08:30");
+assert.strictEqual(restoredCourses[0].stops[0].scheduledTime, undefined);
 assert.strictEqual(JSON.stringify(restoredCourses[0].stops[0].restDays), JSON.stringify([3, 10]));
 assert.strictEqual(restoredCourses[0].lastRoute, null);
 

@@ -434,7 +434,7 @@ input[type="number"]:focus {
 
 .stop-row {
   display: grid;
-  grid-template-columns: 36px minmax(0, 0.85fr) minmax(0, 0.66fr) minmax(0, 1fr) minmax(0, 1.18fr) 98px 38px;
+  grid-template-columns: 36px minmax(0, 0.82fr) minmax(0, 1fr) minmax(0, 1.25fr) 38px;
   gap: 9px;
   align-items: start;
 }
@@ -938,25 +938,19 @@ input[type="number"]:focus {
     grid-template-columns: 34px minmax(0, 1fr) 38px;
     grid-template-areas:
       "number name delete"
-      "number service service"
       "number place place"
       "number address address"
-      "number time time"
       ". rest rest"
       ". error error";
   }
 
   .stop-number {
     grid-area: number;
-    height: 254px;
+    height: 153px;
   }
 
   .stop-name {
     grid-area: name;
-  }
-
-  .stop-service {
-    grid-area: service;
   }
 
   .stop-place {
@@ -965,10 +959,6 @@ input[type="number"]:focus {
 
   .stop-address {
     grid-area: address;
-  }
-
-  .stop-time {
-    grid-area: time;
   }
 
   .rest-days {
@@ -1091,12 +1081,17 @@ input[type="number"]:focus {
     width: 80px;
   }
 
-  .print-service {
-    width: 46px;
+  .print-place {
+    width: 82px;
   }
 
-  .print-place {
-    width: 130px;
+  .print-address {
+    width: 120px;
+  }
+
+  .print-time {
+    width: 46px;
+    text-align: center;
   }
 
   .print-day {
