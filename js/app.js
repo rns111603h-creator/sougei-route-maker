@@ -136,6 +136,21 @@
     ];
   }
 
+  function moveItemInList(list, fromIndex, toIndex) {
+    if (!Array.isArray(list)
+      || fromIndex === toIndex
+      || fromIndex < 0
+      || toIndex < 0
+      || fromIndex >= list.length
+      || toIndex >= list.length) {
+      return list.slice();
+    }
+    const next = list.slice();
+    const [item] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, item);
+    return next;
+  }
+
   function serializeCoursesForStorage(courses) {
     return {
       version: 1,
@@ -1251,7 +1266,7 @@
     elements.summaryDuration.textContent = route.roadRoute ? formatDuration(route.roadRoute.durationSeconds) : "--";
     renderDistanceNote(route.roadRoute, route.optimizationMode, [route.facility, ...route.ordered]);
 
-    renderRouteList(route.facility, route.facilityAddress, route.ordered, route.returnToStart, route.roadRoute, route.schedule);
+    renderRouteList(route);
     renderSchedule(route, elements.departureTime.value, Number.parseInt(elements.stopMinutes.value, 10) || 0);
     renderFailedAddresses(route.failedStops || []);
     renderGoogleMapLink(route.facility, route.ordered, route.returnToStart);
@@ -1296,10 +1311,15 @@
       elements.distanceNote.textContent = `${approximationNote} 順番と走行時間はOSRMの道路時間をもとにした目安です。地図線と距離は直線ベースの表示です。渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
       return;
     }
+    if (optimizationMode === "manual") {
+      elements.distanceNote.textContent = `${approximationNote} 手動で変更した順番で道路距離・走行時間を再計算しています。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。`.trim();
+      return;
+    }
     elements.distanceNote.textContent = `${approximationNote} 順番・道路距離・走行時間はOSRMによる目安です。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。`.trim();
   }
 
-  function renderRouteList(facility, facilityAddress, ordered, returnToStart, roadRoute, schedule) {
+  function renderRouteList(route) {
+    const { facility, facilityAddress, ordered, returnToStart, roadRoute, schedule } = route;
     elements.routeList.innerHTML = "";
     elements.routeList.appendChild(createRouteItem("発", "事業所", facilityAddress, true, facility.isApproximate ? "近似地点（住所の代表地点）" : "出発地"));
     ordered.forEach((stop, index) => {
@@ -1310,7 +1330,12 @@
         getStopDisplayName(stop),
         getStopAddressLabel(stop),
         false,
-        appendApproximateMeta(buildLegMeta(leg, scheduleItem), stop)
+        appendApproximateMeta(buildLegMeta(leg, scheduleItem), stop),
+        {
+          routeIndex: index,
+          routeCount: ordered.length,
+          label: getStopDisplayName(stop)
+        }
       ));
     });
     if (returnToStart) {
@@ -1318,6 +1343,7 @@
       const scheduleItem = schedule[ordered.length];
       elements.routeList.appendChild(createRouteItem("着", "事業所", facilityAddress, true, appendApproximateMeta(buildLegMeta(leg, scheduleItem), facility)));
     }
+    bindRouteReorderControls(route);
   }
 
   function buildLegMeta(leg, scheduleItem) {
@@ -1342,17 +1368,102 @@
     return parts.join(" ・ ");
   }
 
-  function createRouteItem(order, name, address, isFacility, meta) {
+  function createRouteItem(order, name, address, isFacility, meta, reorderOptions) {
     const item = document.createElement("li");
+    const isReorderable = reorderOptions && Number.isInteger(reorderOptions.routeIndex);
+    item.className = isReorderable ? "route-item is-reorderable" : "route-item";
+    if (isReorderable) {
+      item.draggable = true;
+      item.dataset.routeIndex = String(reorderOptions.routeIndex);
+    }
     item.innerHTML = `
       <span class="route-badge${isFacility ? " is-facility" : ""}">${escapeHtml(order)}</span>
-      <span>
+      <span class="route-content">
         <span class="route-name">${escapeHtml(name)}</span>
         <span class="route-address">${escapeHtml(address)}</span>
         ${meta ? `<span class="route-meta">${escapeHtml(meta)}</span>` : ""}
       </span>
+      ${isReorderable ? `
+        <span class="route-reorder-controls" aria-label="${escapeHtml(name)}の順番変更">
+          <button type="button" class="route-move-button" data-route-index="${reorderOptions.routeIndex}" data-move="-1"${reorderOptions.routeIndex === 0 ? " disabled" : ""} aria-label="${escapeHtml(name)}を1つ上へ">↑</button>
+          <button type="button" class="route-move-button" data-route-index="${reorderOptions.routeIndex}" data-move="1"${reorderOptions.routeIndex === reorderOptions.routeCount - 1 ? " disabled" : ""} aria-label="${escapeHtml(name)}を1つ下へ">↓</button>
+          <span class="route-drag-label">ドラッグ</span>
+        </span>
+      ` : ""}
     `;
     return item;
+  }
+
+  function bindRouteReorderControls(route) {
+    elements.routeList.querySelectorAll(".route-item.is-reorderable").forEach((item) => {
+      item.addEventListener("dragstart", (event) => {
+        item.classList.add("is-dragging");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", item.dataset.routeIndex);
+      });
+      item.addEventListener("dragend", () => {
+        item.classList.remove("is-dragging");
+      });
+      item.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        item.classList.add("is-drop-target");
+        event.dataTransfer.dropEffect = "move";
+      });
+      item.addEventListener("dragleave", () => {
+        item.classList.remove("is-drop-target");
+      });
+      item.addEventListener("drop", (event) => {
+        event.preventDefault();
+        item.classList.remove("is-drop-target");
+        const fromIndex = Number.parseInt(event.dataTransfer.getData("text/plain"), 10);
+        const toIndex = Number.parseInt(item.dataset.routeIndex, 10);
+        applyManualRouteMove(route, fromIndex, toIndex);
+      });
+    });
+
+    elements.routeList.querySelectorAll(".route-move-button").forEach((button) => {
+      button.addEventListener("click", () => {
+        const fromIndex = Number.parseInt(button.dataset.routeIndex, 10);
+        const move = Number.parseInt(button.dataset.move, 10);
+        applyManualRouteMove(route, fromIndex, fromIndex + move);
+      });
+    });
+  }
+
+  async function applyManualRouteMove(route, fromIndex, toIndex) {
+    if (!route || elements.calculateRoute.disabled) {
+      return;
+    }
+    const nextOrdered = moveItemInList(route.ordered, fromIndex, toIndex);
+    if (nextOrdered === route.ordered || nextOrdered.every((stop, index) => stop.id === route.ordered[index].id)) {
+      return;
+    }
+
+    route.ordered = nextOrdered;
+    route.optimizationMode = "manual";
+    const course = getActiveCourse();
+    course.stops = sortStopsByRouteOrder(course.stops, route.ordered);
+    renderStops();
+
+    setBusy(true);
+    setProgressText("手動で変更した順番の道路時間を再計算しています...");
+    hideFormMessage();
+    try {
+      const pathPoints = buildRoutePath(route.facility, route.ordered, route.returnToStart);
+      route.roadRoute = await fetchRoadRoute(pathPoints);
+      if (!route.roadRoute) {
+        throw new Error("manual_route_empty_response");
+      }
+      updateRouteSchedule(route);
+      renderRouteResult(route);
+    } catch (error) {
+      route.roadRoute = null;
+      route.schedule = [];
+      renderRouteResult(route);
+      showFormMessage("順番は変更しましたが、道路時間を再計算できませんでした。通信環境を確認して、もう一度ルートを計算してください。");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function renderSchedule(route, departureTime, stopMinutes) {
@@ -1648,6 +1759,7 @@
     parseRestDays,
     isStopRestOnDay,
     sortStopsByRouteOrder,
+    moveItemInList,
     serializeCoursesForStorage,
     hydrateCoursesFromStorage,
     normalizeAddress,

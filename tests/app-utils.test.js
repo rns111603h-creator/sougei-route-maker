@@ -83,6 +83,16 @@ assert.strictEqual(
   JSON.stringify(["c", "a", "b", "d"]),
   "route stops should move to the calculated order while remaining stops stay after them"
 );
+assert.strictEqual(
+  JSON.stringify(utils.moveItemInList(unsortedStops, 2, 0).map((stop) => stop.id)),
+  JSON.stringify(["c", "a", "b", "d"]),
+  "moving a route stop should place it at the requested index"
+);
+assert.strictEqual(
+  JSON.stringify(utils.moveItemInList(unsortedStops, -1, 1).map((stop) => stop.id)),
+  JSON.stringify(["a", "b", "c", "d"]),
+  "invalid route move indexes should leave the list unchanged"
+);
 
 const routeLegs = [
   { durationSeconds: 600, distanceMeters: 1000 },
