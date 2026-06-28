@@ -57,9 +57,20 @@
 
     <section class="course-panel" aria-label="送迎コースの切り替え">
       <div id="course-tabs" class="course-tabs" role="tablist" aria-label="コース一覧"></div>
-      <div class="course-name-box">
-        <label class="field-label" for="course-name">選択中のコース名</label>
-        <input id="course-name" type="text" maxlength="24" placeholder="例：1号車 / Aコース">
+      <div class="course-settings">
+        <div class="course-name-box">
+          <label class="field-label" for="course-name">選択中のコース名</label>
+          <input id="course-name" type="text" maxlength="24" placeholder="例：1号車 / Aコース">
+        </div>
+        <div class="course-contact-box">
+          <label class="field-label" for="course-contact">コース連絡先</label>
+          <input id="course-contact" type="text" maxlength="60" inputmode="tel" placeholder="例：090-0000-0000 / 担当者名">
+        </div>
+        <div class="course-save-actions">
+          <button type="button" id="save-courses" class="small-button">コース設定を保存</button>
+          <button type="button" id="clear-saved-courses" class="small-button ghost-button">保存内容を削除</button>
+        </div>
+        <p id="course-save-status" class="mini-status">コース設定はまだ保存されていません。</p>
       </div>
     </section>
 
@@ -165,8 +176,8 @@
     </main>
 
     <footer class="app-footer">
-      <strong>個人情報は保存しません。</strong>
-      入力内容はブラウザ内でのみ使います。場所名・施設名・住所は緯度経度へ変換する時だけOpenStreetMap Nominatimへ送信されます。道路時間の計算では座標をOSRMへ送信します。氏名は送信されません。現在地保存を使う場合、事業所の座標はこの端末のブラウザ内だけに保存されます。
+      <strong>保存はこの端末のブラウザ内だけです。</strong>
+      「コース設定を保存」を押した場合、コース名・連絡先・利用者名・場所名・住所がこの端末に保存されます。場所名・施設名・住所は緯度経度へ変換する時だけOpenStreetMap Nominatimへ送信されます。道路時間の計算では座標をOSRMへ送信します。現在地保存を使う場合、事業所の座標もこの端末のブラウザ内だけに保存されます。
     </footer>
 
     <section id="print-sheet" aria-label="印刷用ルート表">
@@ -175,6 +186,7 @@
         <div>日付：<span></span></div>
         <div>運転者：<span></span></div>
         <div>車両：<span></span></div>
+        <div>連絡先：<span id="print-contact"></span></div>
       </div>
       <table>
         <thead>

@@ -6,6 +6,7 @@
   const OSRM_ROUTE_ENDPOINT = "https://router.project-osrm.org/route/v1/driving";
   const OSRM_TABLE_ENDPOINT = "https://router.project-osrm.org/table/v1/driving";
   const SAVED_FACILITY_KEY = "sougeiRouteMaker.savedFacilityLocation";
+  const SAVED_COURSES_KEY = "sougeiRouteMaker.savedCourses";
   const MAX_COURSES = 4;
   const INITIAL_STOP_ROWS = 3;
 
@@ -42,6 +43,7 @@
     const course = {
       id: `course-${number}`,
       name: `コース${number}`,
+      contact: "",
       stops: [],
       nextId: 1,
       lastRoute: null
@@ -88,6 +90,53 @@
       }
     });
     return queries;
+  }
+
+  function serializeCoursesForStorage(courses) {
+    return {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      courses: courses.slice(0, MAX_COURSES).map((course, index) => ({
+        name: String(course.name || `コース${index + 1}`).trim() || `コース${index + 1}`,
+        contact: String(course.contact || "").trim(),
+        stops: course.stops.map((stop) => ({
+          name: String(stop.name || "").trim(),
+          place: String(stop.place || "").trim(),
+          address: String(stop.address || "").trim()
+        }))
+      }))
+    };
+  }
+
+  function hydrateCoursesFromStorage(payload) {
+    const courses = createInitialCourses();
+    if (!payload || payload.version !== 1 || !Array.isArray(payload.courses)) {
+      return courses;
+    }
+
+    payload.courses.slice(0, MAX_COURSES).forEach((storedCourse, index) => {
+      const course = courses[index];
+      course.name = String(storedCourse.name || `コース${index + 1}`).trim() || `コース${index + 1}`;
+      course.contact = String(storedCourse.contact || "").trim();
+      if (Array.isArray(storedCourse.stops)) {
+        course.stops = [];
+        course.nextId = 1;
+        storedCourse.stops.forEach((storedStop) => {
+          course.stops.push(createStop(
+            course,
+            String(storedStop.name || "").trim(),
+            String(storedStop.place || "").trim(),
+            String(storedStop.address || "").trim()
+          ));
+        });
+        if (course.stops.length === 0) {
+          course.stops.push(createStop(course));
+        }
+      }
+      course.lastRoute = null;
+    });
+
+    return courses;
   }
 
   function distanceKm(a, b) {
@@ -556,6 +605,7 @@
     if (!hasRequiredElements()) {
       return;
     }
+    loadSavedCourses();
     loadSavedFacilityLocation();
     bindEvents();
     renderCourseTabs();
@@ -566,6 +616,10 @@
   function cacheElements() {
     elements.courseTabs = document.getElementById("course-tabs");
     elements.courseName = document.getElementById("course-name");
+    elements.courseContact = document.getElementById("course-contact");
+    elements.saveCourses = document.getElementById("save-courses");
+    elements.clearSavedCourses = document.getElementById("clear-saved-courses");
+    elements.courseSaveStatus = document.getElementById("course-save-status");
     elements.facilityAddress = document.getElementById("facility-address");
     elements.returnToStart = document.getElementById("return-to-start");
     elements.saveCurrentLocation = document.getElementById("save-current-location");
@@ -596,6 +650,7 @@
     elements.googleMapLink = document.getElementById("google-map-link");
     elements.printRoute = document.getElementById("print-route");
     elements.printTitle = document.getElementById("print-title");
+    elements.printContact = document.getElementById("print-contact");
     elements.printBody = document.getElementById("print-body");
     elements.printNote = document.getElementById("print-note");
   }
@@ -609,6 +664,9 @@
     elements.calculateRoute.addEventListener("click", calculateRoute);
     elements.printRoute.addEventListener("click", () => window.print());
     elements.courseName.addEventListener("input", updateActiveCourseName);
+    elements.courseContact.addEventListener("input", updateActiveCourseContact);
+    elements.saveCourses.addEventListener("click", saveCoursesToBrowser);
+    elements.clearSavedCourses.addEventListener("click", clearSavedCourses);
     elements.modePickup.addEventListener("click", () => setMode("pickup"));
     elements.modeDropoff.addEventListener("click", () => setMode("dropoff"));
     elements.saveCurrentLocation.addEventListener("click", saveCurrentLocationAsFacility);
@@ -636,6 +694,7 @@
   function renderCourseName() {
     const course = getActiveCourse();
     elements.courseName.value = course.name;
+    elements.courseContact.value = course.contact;
   }
 
   function updateActiveCourseName(event) {
@@ -643,6 +702,50 @@
     course.name = event.target.value.trim() || `コース${state.activeCourseIndex + 1}`;
     renderCourseTabs();
     refreshCourseResultLabels();
+  }
+
+  function updateActiveCourseContact(event) {
+    getActiveCourse().contact = event.target.value.trim();
+    refreshCourseResultLabels();
+  }
+
+  function loadSavedCourses() {
+    try {
+      const raw = window.localStorage.getItem(SAVED_COURSES_KEY);
+      if (raw) {
+        state.courses = hydrateCoursesFromStorage(JSON.parse(raw));
+        updateCourseSaveStatus("保存済みのコース設定を読み込みました。");
+        return;
+      }
+    } catch (error) {
+      state.courses = createInitialCourses();
+      updateCourseSaveStatus("保存済みコース設定を読み込めませんでした。", "error");
+      return;
+    }
+    updateCourseSaveStatus();
+  }
+
+  function saveCoursesToBrowser() {
+    try {
+      window.localStorage.setItem(SAVED_COURSES_KEY, JSON.stringify(serializeCoursesForStorage(state.courses)));
+      updateCourseSaveStatus("コース名・連絡先・立ち寄り先をこの端末に保存しました。");
+    } catch (error) {
+      updateCourseSaveStatus("コース設定を保存できませんでした。ブラウザの保存領域を確認してください。", "error");
+    }
+  }
+
+  function clearSavedCourses() {
+    window.localStorage.removeItem(SAVED_COURSES_KEY);
+    updateCourseSaveStatus("保存済みのコース設定を削除しました。");
+  }
+
+  function updateCourseSaveStatus(message, type) {
+    if (!elements.courseSaveStatus) {
+      return;
+    }
+    elements.courseSaveStatus.textContent = message || "コース設定はまだ保存されていません。";
+    elements.courseSaveStatus.classList.toggle("is-ready", Boolean(message) && type !== "error");
+    elements.courseSaveStatus.classList.toggle("is-error", type === "error");
   }
 
   function switchCourse(index) {
@@ -1219,6 +1322,7 @@
 
   function renderPrintSheet(facilityAddress, ordered, returnToStart, schedule) {
     elements.printTitle.textContent = `送迎ルート表（${state.mode === "pickup" ? "お迎え" : "お送り"}・${getActiveCourse().name}）`;
+    elements.printContact.textContent = getActiveCourse().contact || "";
     elements.printBody.innerHTML = "";
     elements.printBody.appendChild(createPrintRow("-", "発", "事業所（出発）", facilityAddress, elements.departureTime.value || ""));
     ordered.forEach((stop, index) => {
@@ -1257,6 +1361,8 @@
     createInitialCourses,
     buildStopSearchQueries,
     getStopDisplayName,
+    serializeCoursesForStorage,
+    hydrateCoursesFromStorage,
     normalizeAddress,
     buildGeocodeCandidates,
     isPlausibleGeocodeHit

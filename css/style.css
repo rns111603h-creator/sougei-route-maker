@@ -226,8 +226,21 @@ h1 {
   min-width: 0;
 }
 
-.course-name-box .field-label {
+.course-settings {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
+.course-name-box .field-label,
+.course-contact-box .field-label {
   margin-bottom: 5px;
+}
+
+.course-save-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .workbench {
