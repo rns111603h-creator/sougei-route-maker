@@ -193,12 +193,27 @@
   }
 
   async function geocodeAddress(address) {
+    const candidates = buildGeocodeCandidates(address);
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      if (index > 0) {
+        await sleep(GEOCODE_DELAY_MS);
+      }
+      const location = await searchNominatimCandidate(candidate);
+      if (location) {
+        return location;
+      }
+    }
+    return null;
+  }
+
+  async function searchNominatimCandidate(candidate) {
     const url = new URL(NOMINATIM_ENDPOINT);
     url.searchParams.set("format", "json");
-    url.searchParams.set("limit", "1");
+    url.searchParams.set("limit", "3");
     url.searchParams.set("countrycodes", "jp");
     url.searchParams.set("accept-language", "ja");
-    url.searchParams.set("q", address);
+    url.searchParams.set("q", candidate.query);
 
     const response = await window.fetch(url.toString(), {
       headers: { "Accept": "application/json" }
@@ -210,10 +225,107 @@
     if (!Array.isArray(data) || data.length === 0) {
       return null;
     }
+    const hit = pickNominatimHit(data, candidate);
+    if (!hit) {
+      return null;
+    }
     return {
-      lat: Number.parseFloat(data[0].lat),
-      lng: Number.parseFloat(data[0].lon)
+      lat: Number.parseFloat(hit.lat),
+      lng: Number.parseFloat(hit.lon),
+      displayName: hit.display_name || "",
+      geocodeQuery: candidate.query,
+      isApproximate: candidate.isApproximate
     };
+  }
+
+  function buildGeocodeCandidates(address) {
+    const normalized = normalizeAddress(address);
+    const candidates = [];
+    addGeocodeCandidate(candidates, String(address || "").trim(), false);
+    addGeocodeCandidate(candidates, normalized, false);
+
+    const parts = parseJapaneseAddress(normalized);
+    const chomeQuery = buildChomeFallbackQuery(parts);
+    if (chomeQuery) {
+      addGeocodeCandidate(candidates, chomeQuery, true, parts);
+    }
+
+    return candidates;
+  }
+
+  function addGeocodeCandidate(candidates, query, isApproximate, parts) {
+    if (!query || candidates.some((candidate) => candidate.query === query)) {
+      return;
+    }
+    candidates.push({ query, isApproximate, parts: parts || parseJapaneseAddress(query) });
+  }
+
+  function normalizeAddress(address) {
+    return String(address || "")
+      .normalize("NFKC")
+      .replace(/〒?\s*\d{3}[-\s]?\d{4}/g, "")
+      .replace(/[‐‑‒–—―ー−－]/g, "-")
+      .replace(/[　\s]+/g, "")
+      .replace(/番地/g, "番")
+      .replace(/号室/g, "号")
+      .trim();
+  }
+
+  function parseJapaneseAddress(address) {
+    const normalized = normalizeAddress(address);
+    const stateMatch = normalized.match(/^(東京都|北海道|(?:京都|大阪)府|.{2,3}県)/);
+    const state = stateMatch ? stateMatch[1] : "";
+    const restAfterState = state ? normalized.slice(state.length) : normalized;
+    const cityMatch = restAfterState.match(/^(.+?[市区町村])/);
+    const city = cityMatch ? cityMatch[1] : "";
+    const rest = city ? restAfterState.slice(city.length) : restAfterState;
+    const chomeMatch = rest.match(/^(.+?)(\d+)丁目/) || rest.match(/^(.+?)(\d+)-\d+/);
+    return {
+      state,
+      city,
+      town: chomeMatch ? chomeMatch[1] : "",
+      chome: chomeMatch ? chomeMatch[2] : "",
+      rest
+    };
+  }
+
+  function buildChomeFallbackQuery(parts) {
+    if (!parts || !parts.town || !parts.chome || (!parts.city && !parts.state)) {
+      return "";
+    }
+    return `${parts.state}${parts.city}${parts.town}${parts.chome}丁目`;
+  }
+
+  function pickNominatimHit(results, candidate) {
+    const matchingHit = results.find((result) => isPlausibleGeocodeHit(result, candidate.parts));
+    if (matchingHit) {
+      return matchingHit;
+    }
+    if (!hasAddressContext(candidate.parts)) {
+      return results[0];
+    }
+    return null;
+  }
+
+  function hasAddressContext(parts) {
+    return Boolean(parts && (parts.state || parts.city || parts.town));
+  }
+
+  function isPlausibleGeocodeHit(result, parts) {
+    const displayName = result && result.display_name ? normalizeAddress(result.display_name) : "";
+    if (!displayName) {
+      return false;
+    }
+    if (parts.state && !displayName.includes(parts.state)) {
+      return false;
+    }
+    if (parts.city && !displayName.includes(parts.city)) {
+      return false;
+    }
+    if (parts.town && !displayName.includes(parts.town)) {
+      return false;
+    }
+    return true;
   }
 
   function buildGoogleMapsUrl(facility, ordered, returnToStart) {
@@ -538,7 +650,7 @@
         <input class="stop-name" type="text" value="${escapeHtml(stop.name)}" placeholder="お名前" aria-label="${index + 1}番目の名前">
         <input class="stop-address" type="text" value="${escapeHtml(stop.address)}" placeholder="住所（市町村から）" aria-label="${index + 1}番目の住所">
         <button class="delete-stop" type="button" aria-label="${index + 1}番目の立ち寄り先を削除">×</button>
-        <div class="stop-error" hidden>住所が見つかりません。番地や市町村名を確認してください。</div>
+        <div class="stop-error" hidden>住所が見つかりません。市町村名を入れる、施設名にする、または丁目までの住所に直してみてください。</div>
       `;
 
       row.querySelector(".stop-name").addEventListener("input", (event) => {
@@ -580,7 +692,7 @@
       setProgressText("事業所の場所を調べています...");
       const facility = await resolveFacilityLocation(facilityAddress, useSavedFacility);
       if (!facility) {
-        showFormMessage("事業所の住所が見つかりませんでした。市町村名や番地を確認してください。");
+        showFormMessage("事業所の住所が見つかりませんでした。市町村名を含める、施設名にする、または丁目までの住所に直してみてください。");
         elements.facilityAddress.focus();
         return;
       }
@@ -718,9 +830,9 @@
       ? formatDistanceMeters(roadRoute.distanceMeters)
       : `${routeDistance(facility, ordered, returnToStart).toFixed(1)} km`;
     elements.summaryDuration.textContent = roadRoute ? formatDuration(roadRoute.durationSeconds) : "--";
-    renderDistanceNote(roadRoute, optimizationMode);
+    renderDistanceNote(roadRoute, optimizationMode, [facility, ...ordered]);
 
-    renderRouteList(facilityAddress, ordered, returnToStart, roadRoute, schedule);
+    renderRouteList(facility, facilityAddress, ordered, returnToStart, roadRoute, schedule);
     renderSchedule(facilityAddress, ordered, returnToStart, roadRoute, schedule, departureTime, stopMinutes);
     renderFailedAddresses(failedStops);
     renderGoogleMapLink(facility, ordered, returnToStart);
@@ -729,21 +841,24 @@
     elements.result.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function renderDistanceNote(roadRoute, optimizationMode) {
+  function renderDistanceNote(roadRoute, optimizationMode, points) {
+    const approximationNote = points.some((point) => point.isApproximate)
+      ? "一部の住所は番地まで見つからなかったため、丁目などの代表地点で表示しています。Googleマップや現場判断で位置を確認してください。"
+      : "";
     if (optimizationMode === "straight-line") {
-      elements.distanceNote.textContent = "OSRMの道路時間を取得できなかったため、直線距離を使って順番を計算しています。実際の走行時間はGoogleマップや現場判断で確認してください。";
+      elements.distanceNote.textContent = `${approximationNote} OSRMの道路時間を取得できなかったため、直線距離を使って順番を計算しています。実際の走行時間はGoogleマップや現場判断で確認してください。`.trim();
       return;
     }
     if (roadRoute && roadRoute.isDurationMatrixEstimate) {
-      elements.distanceNote.textContent = "順番と走行時間はOSRMの道路時間をもとにした目安です。地図線と距離は直線ベースの表示です。渋滞、信号待ち、乗降介助時間は反映されません。";
+      elements.distanceNote.textContent = `${approximationNote} 順番と走行時間はOSRMの道路時間をもとにした目安です。地図線と距離は直線ベースの表示です。渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
       return;
     }
-    elements.distanceNote.textContent = "順番・道路距離・走行時間はOSRMによる目安です。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。";
+    elements.distanceNote.textContent = `${approximationNote} 順番・道路距離・走行時間はOSRMによる目安です。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。`.trim();
   }
 
-  function renderRouteList(facilityAddress, ordered, returnToStart, roadRoute, schedule) {
+  function renderRouteList(facility, facilityAddress, ordered, returnToStart, roadRoute, schedule) {
     elements.routeList.innerHTML = "";
-    elements.routeList.appendChild(createRouteItem("発", "事業所", facilityAddress, true, "出発地"));
+    elements.routeList.appendChild(createRouteItem("発", "事業所", facilityAddress, true, facility.isApproximate ? "近似地点（住所の代表地点）" : "出発地"));
     ordered.forEach((stop, index) => {
       const leg = roadRoute && roadRoute.legs[index] ? roadRoute.legs[index] : null;
       const scheduleItem = schedule[index];
@@ -752,13 +867,13 @@
         stop.name || "名前なし",
         stop.address,
         false,
-        buildLegMeta(leg, scheduleItem)
+        appendApproximateMeta(buildLegMeta(leg, scheduleItem), stop)
       ));
     });
     if (returnToStart) {
       const leg = roadRoute && roadRoute.legs[ordered.length] ? roadRoute.legs[ordered.length] : null;
       const scheduleItem = schedule[ordered.length];
-      elements.routeList.appendChild(createRouteItem("着", "事業所", facilityAddress, true, buildLegMeta(leg, scheduleItem)));
+      elements.routeList.appendChild(createRouteItem("着", "事業所", facilityAddress, true, appendApproximateMeta(buildLegMeta(leg, scheduleItem), facility)));
     }
   }
 
@@ -769,6 +884,17 @@
     }
     if (leg) {
       parts.push(`${formatDuration(leg.durationSeconds)} / ${formatDistanceMeters(leg.distanceMeters)}`);
+    }
+    return parts.join(" ・ ");
+  }
+
+  function appendApproximateMeta(meta, point) {
+    const parts = [];
+    if (meta) {
+      parts.push(meta);
+    }
+    if (point.isApproximate) {
+      parts.push("近似地点");
     }
     return parts.join(" ・ ");
   }
@@ -836,7 +962,7 @@
       return;
     }
 
-    elements.failedAddresses.innerHTML = `<strong>${failedStops.length}件の住所が見つかりませんでした。</strong> 赤色の行を修正して、もう一度計算してください。<br>${failedStops
+    elements.failedAddresses.innerHTML = `<strong>${failedStops.length}件の住所が見つかりませんでした。</strong> 市町村名を含める、施設名にする、または丁目までの住所に直して、もう一度計算してください。<br>${failedStops
       .map((stop) => `・${escapeHtml(stop.name || "名前なし")}：${escapeHtml(stop.address)}`)
       .join("<br>")}`;
     elements.failedAddresses.classList.add("is-visible");
@@ -951,7 +1077,10 @@
     optimizeRouteByDurationMatrix,
     buildArrivalSchedule,
     formatDuration,
-    formatDistanceMeters
+    formatDistanceMeters,
+    normalizeAddress,
+    buildGeocodeCandidates,
+    isPlausibleGeocodeHit
   };
 
   if (document.readyState === "loading") {
