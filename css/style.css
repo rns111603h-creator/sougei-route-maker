@@ -182,6 +182,54 @@ h1 {
   background: var(--blue);
 }
 
+.course-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow);
+}
+
+.course-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.course-tab {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--blue-dark);
+  background: var(--blue-soft);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.course-tab:hover {
+  background: #dce8fd;
+}
+
+.course-tab.is-active {
+  color: #fff;
+  border-color: var(--blue);
+  background: var(--blue);
+}
+
+.course-name-box {
+  min-width: 0;
+}
+
+.course-name-box .field-label {
+  margin-bottom: 5px;
+}
+
 .workbench {
   display: grid;
   grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.08fr);
@@ -367,7 +415,7 @@ input[type="number"]:focus {
 
 .stop-row {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) minmax(0, 1.62fr) 38px;
+  grid-template-columns: 36px minmax(0, 0.82fr) minmax(0, 1fr) minmax(0, 1.25fr) 38px;
   gap: 9px;
   align-items: start;
 }
@@ -784,6 +832,7 @@ input[type="number"]:focus {
 
 @media (max-width: 900px) {
   .app-header,
+  .course-panel,
   .workbench {
     grid-template-columns: 1fr;
   }
@@ -823,17 +872,22 @@ input[type="number"]:focus {
     grid-template-columns: 34px minmax(0, 1fr) 38px;
     grid-template-areas:
       "number name delete"
+      "number place place"
       "number address address"
       ". error error";
   }
 
   .stop-number {
     grid-area: number;
-    height: 99px;
+    height: 153px;
   }
 
   .stop-name {
     grid-area: name;
+  }
+
+  .stop-place {
+    grid-area: place;
   }
 
   .stop-address {
@@ -851,7 +905,8 @@ input[type="number"]:focus {
   .summary-grid,
   .result-actions,
   .location-tools,
-  .time-grid {
+  .time-grid,
+  .course-tabs {
     grid-template-columns: 1fr;
   }
 

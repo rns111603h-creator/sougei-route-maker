@@ -55,6 +55,14 @@
       </div>
     </header>
 
+    <section class="course-panel" aria-label="送迎コースの切り替え">
+      <div id="course-tabs" class="course-tabs" role="tablist" aria-label="コース一覧"></div>
+      <div class="course-name-box">
+        <label class="field-label" for="course-name">選択中のコース名</label>
+        <input id="course-name" type="text" maxlength="24" placeholder="例：1号車 / Aコース">
+      </div>
+    </section>
+
     <main class="workbench">
       <section class="input-column" aria-label="ルート条件の入力">
         <div class="panel">
@@ -94,7 +102,7 @@
           <div class="section-kicker"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-people"></use></svg><span id="stops-kicker">お迎えする利用者</span></div>
           <div class="section-heading">
             <h2>立ち寄り先</h2>
-            <p>名前と住所を行ごとに入力します。</p>
+            <p>場所名で検索し、見つからない時は住所を使います。</p>
           </div>
           <div id="stops" class="stops-list" aria-live="polite"></div>
           <button type="button" id="add-stop" class="secondary-button"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-plus"></use></svg>立ち寄り先を追加</button>
@@ -117,7 +125,7 @@
           <h2>3ステップでルート表まで作れます</h2>
           <ol>
             <li><strong>事業所の住所</strong>を入力します。</li>
-            <li><strong>利用者の名前と住所</strong>を追加します。</li>
+            <li><strong>利用者名、場所名、住所</strong>を追加します。</li>
             <li><strong>ルートを計算する</strong>を押します。</li>
           </ol>
           <p>結果欄に地図、巡回順、概算距離、Googleマップ起動リンク、印刷用ルート表が表示されます。</p>
@@ -158,7 +166,7 @@
 
     <footer class="app-footer">
       <strong>個人情報は保存しません。</strong>
-      入力内容はブラウザ内でのみ使います。住所は緯度経度へ変換する時だけOpenStreetMap Nominatimへ送信されます。道路時間の計算では座標をOSRMへ送信します。氏名は送信されません。現在地保存を使う場合、事業所の座標はこの端末のブラウザ内だけに保存されます。
+      入力内容はブラウザ内でのみ使います。場所名・施設名・住所は緯度経度へ変換する時だけOpenStreetMap Nominatimへ送信されます。道路時間の計算では座標をOSRMへ送信します。氏名は送信されません。現在地保存を使う場合、事業所の座標はこの端末のブラウザ内だけに保存されます。
     </footer>
 
     <section id="print-sheet" aria-label="印刷用ルート表">
