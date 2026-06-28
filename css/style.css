@@ -813,6 +813,41 @@ input[type="number"]:focus {
   padding: 0 13px 12px;
 }
 
+.schedule-time-control {
+  display: grid;
+  grid-template-columns: minmax(104px, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.schedule-time-input {
+  min-height: 38px;
+  padding: 7px 9px;
+}
+
+.schedule-auto-button {
+  min-height: 38px;
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--blue-dark);
+  background: var(--blue-soft);
+  font-size: 0.76rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.schedule-auto-button:disabled {
+  color: #96a0ad;
+  background: #f1f4f9;
+  cursor: not-allowed;
+}
+
+.route-meta.is-manual {
+  color: var(--red-dark);
+  background: var(--red-soft);
+}
+
 .schedule-empty {
   margin: 0;
   padding: 12px 13px;

@@ -593,25 +593,34 @@
     };
   }
 
-  function buildArrivalSchedule(departureTime, legs, stopMinutes) {
+  function buildArrivalSchedule(departureTime, legs, stopMinutes, manualArrivalTimes = {}, ordered = []) {
     if (!departureTime || !legs.length) {
       return [];
     }
-    const [hours, minutes] = departureTime.split(":").map((value) => Number.parseInt(value, 10));
-    if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
+    const departureMinutes = parseClockMinutes(departureTime);
+    if (!Number.isFinite(departureMinutes)) {
       return [];
     }
     const stopSeconds = Math.max(0, Number(stopMinutes) || 0) * 60;
-    let elapsedSeconds = 0;
+    let currentMinutes = departureMinutes;
     return legs.map((leg, index) => {
-      elapsedSeconds += leg.durationSeconds;
-      const arrivalTime = formatClockTime(hours, minutes, elapsedSeconds);
-      const elapsedMinutes = Math.round(elapsedSeconds / 60);
+      const legMinutes = Math.round(leg.durationSeconds / 60);
+      currentMinutes += legMinutes;
+      const stopId = ordered[index] && ordered[index].id ? ordered[index].id : "";
+      const manualMinutes = stopId ? parseClockMinutes(manualArrivalTimes[stopId]) : NaN;
+      const isManual = Number.isFinite(manualMinutes);
+      if (isManual) {
+        currentMinutes = manualMinutes;
+      }
+      const arrivalTime = formatClockFromMinutes(currentMinutes);
+      const elapsedMinutes = Math.round(minutesBetween(departureMinutes, currentMinutes));
       if (index < legs.length - 1) {
-        elapsedSeconds += stopSeconds;
+        currentMinutes += Math.round(stopSeconds / 60);
       }
       return {
         arrivalTime,
+        isManual,
+        stopId,
         elapsedMinutes,
         legDurationSeconds: leg.durationSeconds,
         legDistanceMeters: leg.distanceMeters
@@ -619,12 +628,32 @@
     });
   }
 
-  function formatClockTime(baseHours, baseMinutes, offsetSeconds) {
-    const totalMinutes = baseHours * 60 + baseMinutes + Math.round(offsetSeconds / 60);
-    const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  function parseClockMinutes(value) {
+    const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) {
+      return NaN;
+    }
+    const hours = Number.parseInt(match[1], 10);
+    const minutes = Number.parseInt(match[2], 10);
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      return NaN;
+    }
+    return hours * 60 + minutes;
+  }
+
+  function formatClockFromMinutes(totalMinutes) {
+    const normalized = ((Math.round(totalMinutes) % 1440) + 1440) % 1440;
     const hours = Math.floor(normalized / 60);
     const minutes = normalized % 60;
     return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  }
+
+  function minutesBetween(startMinutes, endMinutes) {
+    let diff = endMinutes - startMinutes;
+    while (diff < 0) {
+      diff += 1440;
+    }
+    return diff;
   }
 
   function buildDurationEstimateRoute(facility, ordered, returnToStart, durationMatrix) {
@@ -722,6 +751,8 @@
     elements.saveCurrentLocation.addEventListener("click", saveCurrentLocationAsFacility);
     elements.useSavedLocation.addEventListener("click", useSavedFacilityLocation);
     elements.clearSavedLocation.addEventListener("click", clearSavedFacilityLocation);
+    elements.departureTime.addEventListener("input", refreshActiveRouteSchedule);
+    elements.stopMinutes.addEventListener("input", refreshActiveRouteSchedule);
   }
 
   function renderCourseTabs() {
@@ -1197,9 +1228,10 @@
   function renderResult(facility, facilityAddress, ordered, returnToStart, failedStops, roadRoute, optimizationMode) {
     const departureTime = elements.departureTime.value;
     const stopMinutes = Number.parseInt(elements.stopMinutes.value, 10) || 0;
-    const schedule = roadRoute ? buildArrivalSchedule(departureTime, roadRoute.legs, stopMinutes) : [];
+    const manualArrivalTimes = {};
+    const schedule = roadRoute ? buildArrivalSchedule(departureTime, roadRoute.legs, stopMinutes, manualArrivalTimes, ordered) : [];
     const course = getActiveCourse();
-    course.lastRoute = { facility, facilityAddress, ordered, returnToStart, failedStops, roadRoute, schedule, optimizationMode };
+    course.lastRoute = { facility, facilityAddress, ordered, returnToStart, failedStops, roadRoute, schedule, manualArrivalTimes, optimizationMode };
     course.stops = sortStopsByRouteOrder(course.stops, ordered);
     renderStops();
     (failedStops || []).forEach((stop) => markAddressError(stop.id));
@@ -1220,11 +1252,32 @@
     renderDistanceNote(route.roadRoute, route.optimizationMode, [route.facility, ...route.ordered]);
 
     renderRouteList(route.facility, route.facilityAddress, route.ordered, route.returnToStart, route.roadRoute, route.schedule);
-    renderSchedule(route.facilityAddress, route.ordered, route.returnToStart, route.roadRoute, route.schedule, elements.departureTime.value, Number.parseInt(elements.stopMinutes.value, 10) || 0);
+    renderSchedule(route, elements.departureTime.value, Number.parseInt(elements.stopMinutes.value, 10) || 0);
     renderFailedAddresses(route.failedStops || []);
     renderGoogleMapLink(route.facility, route.ordered, route.returnToStart);
     renderMap(route.facility, route.ordered, route.returnToStart, route.roadRoute);
     renderPrintSheet(route.facilityAddress, route.ordered, route.returnToStart, route.schedule);
+  }
+
+  function refreshActiveRouteSchedule() {
+    const course = getActiveCourse();
+    if (!course || !course.lastRoute || !course.lastRoute.roadRoute) {
+      return;
+    }
+    updateRouteSchedule(course.lastRoute);
+    renderRouteResult(course.lastRoute);
+  }
+
+  function updateRouteSchedule(route) {
+    const departureTime = elements.departureTime.value;
+    const stopMinutes = Number.parseInt(elements.stopMinutes.value, 10) || 0;
+    route.schedule = buildArrivalSchedule(
+      departureTime,
+      route.roadRoute.legs,
+      stopMinutes,
+      route.manualArrivalTimes || {},
+      route.ordered
+    );
   }
 
   function buildResultTitle(course) {
@@ -1302,7 +1355,8 @@
     return item;
   }
 
-  function renderSchedule(facilityAddress, ordered, returnToStart, roadRoute, schedule, departureTime, stopMinutes) {
+  function renderSchedule(route, departureTime, stopMinutes) {
+    const { facilityAddress, ordered, returnToStart, roadRoute, schedule } = route;
     if (!roadRoute) {
       elements.schedule.classList.add("is-visible");
       elements.schedule.innerHTML = "<h3>到着予定</h3><p class=\"schedule-empty\">道路ルートの取得に失敗したため、到着予定時刻は表示できません。</p>";
@@ -1310,6 +1364,7 @@
     }
     const targets = ordered.map((stop, index) => ({
       order: String(index + 1),
+      stopId: stop.id,
       name: getStopDisplayName(stop),
       address: getStopAddressLabel(stop)
     }));
@@ -1319,12 +1374,24 @@
     const rows = targets.map((target, index) => {
       const leg = roadRoute.legs[index];
       const scheduleItem = schedule[index];
-      const arrival = scheduleItem ? scheduleItem.arrivalTime : "出発時刻未設定";
+      const arrival = scheduleItem ? scheduleItem.arrivalTime : "";
+      const arrivalLabel = arrival || "出発時刻未設定";
+      const isManual = Boolean(scheduleItem && scheduleItem.isManual);
+      const timeCell = target.stopId
+        ? `
+          <div class="schedule-time-control">
+            <input class="schedule-time-input" type="time" value="${escapeHtml(arrival)}" data-stop-id="${escapeHtml(target.stopId)}" aria-label="${escapeHtml(target.name)}の予定時刻を調整">
+            <button type="button" class="schedule-auto-button" data-stop-id="${escapeHtml(target.stopId)}"${isManual ? "" : " disabled"}>自動</button>
+          </div>
+          ${arrival ? "" : "<span class=\"route-address\">出発時刻未設定</span>"}
+          ${isManual ? "<span class=\"route-meta is-manual\">手入力</span>" : ""}
+        `
+        : escapeHtml(arrivalLabel);
       return `
         <tr>
           <td>${escapeHtml(target.order)}</td>
           <td>${escapeHtml(target.name)}<br><span class="route-address">${escapeHtml(target.address)}</span></td>
-          <td>${escapeHtml(arrival)}</td>
+          <td>${timeCell}</td>
           <td>${escapeHtml(formatDuration(leg.durationSeconds))}</td>
           <td>${escapeHtml(formatDistanceMeters(leg.distanceMeters))}</td>
         </tr>
@@ -1341,8 +1408,40 @@
           <tbody>${rows}</tbody>
         </table>
       </div>
-      <p class="mini-status">${escapeHtml(departureNote)}</p>
+      <p class="mini-status">${escapeHtml(departureNote)} 必要な地点の予定時刻を手入力すると、それ以降の予定時刻も自動で調整します。</p>
     `;
+    bindScheduleControls(route);
+  }
+
+  function bindScheduleControls(route) {
+    elements.schedule.querySelectorAll(".schedule-time-input").forEach((input) => {
+      input.addEventListener("change", (event) => {
+        const stopId = event.target.dataset.stopId;
+        if (!stopId) {
+          return;
+        }
+        route.manualArrivalTimes = route.manualArrivalTimes || {};
+        const manualMinutes = parseClockMinutes(event.target.value);
+        if (Number.isFinite(manualMinutes)) {
+          route.manualArrivalTimes[stopId] = event.target.value;
+        } else {
+          delete route.manualArrivalTimes[stopId];
+        }
+        updateRouteSchedule(route);
+        renderRouteResult(route);
+      });
+    });
+    elements.schedule.querySelectorAll(".schedule-auto-button").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        const stopId = event.target.dataset.stopId;
+        if (!stopId || !route.manualArrivalTimes) {
+          return;
+        }
+        delete route.manualArrivalTimes[stopId];
+        updateRouteSchedule(route);
+        renderRouteResult(route);
+      });
+    });
   }
 
   function renderFailedAddresses(failedStops) {

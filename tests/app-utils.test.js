@@ -84,6 +84,28 @@ assert.strictEqual(
   "route stops should move to the calculated order while remaining stops stay after them"
 );
 
+const routeLegs = [
+  { durationSeconds: 600, distanceMeters: 1000 },
+  { durationSeconds: 900, distanceMeters: 2000 },
+  { durationSeconds: 1200, distanceMeters: 3000 }
+];
+const adjustedSchedule = utils.buildArrivalSchedule("08:00", routeLegs, 5, { b: "08:40" }, [
+  { id: "a" },
+  { id: "b" }
+]);
+assert.strictEqual(
+  JSON.stringify(adjustedSchedule.map((item) => ({
+    arrivalTime: item.arrivalTime,
+    isManual: item.isManual
+  }))),
+  JSON.stringify([
+    { arrivalTime: "08:10", isManual: false },
+    { arrivalTime: "08:40", isManual: true },
+    { arrivalTime: "09:05", isManual: false }
+  ]),
+  "manual arrival time should reset the timeline for following stops and return leg"
+);
+
 courses[0].name = "1号車";
 courses[0].contact = "090-0000-0000";
 courses[0].targetMonth = "2026-04";
