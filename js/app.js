@@ -8,7 +8,8 @@
   const SAVED_FACILITY_KEY = "sougeiRouteMaker.savedFacilityLocation";
   const SAVED_COURSES_KEY = "sougeiRouteMaker.savedCourses";
   const MAX_COURSES = 4;
-  const INITIAL_STOP_ROWS = 3;
+  const INITIAL_STOP_ROWS = 1;
+  const PREFECTURE_PATTERN = /(北海道|東京都|京都府|大阪府|(?:青森|岩手|宮城|秋田|山形|福島|茨城|栃木|群馬|埼玉|千葉|神奈川|新潟|富山|石川|福井|山梨|長野|岐阜|静岡|愛知|三重|滋賀|兵庫|奈良|和歌山|鳥取|島根|岡山|広島|山口|徳島|香川|愛媛|高知|福岡|佐賀|長崎|熊本|大分|宮崎|鹿児島|沖縄)県)/;
 
   const state = {
     mode: "pickup",
@@ -86,7 +87,14 @@
 
   function buildStopSearchQueries(stop) {
     const queries = [];
-    [stop.place, stop.address].forEach((value) => {
+    const place = String(stop.place || "").trim();
+    const address = String(stop.address || "").trim();
+    if (place && address) {
+      queries.push(`${place} ${address}`);
+      queries.push(address);
+      return queries;
+    }
+    [place, address].forEach((value) => {
       const query = String(value || "").trim();
       if (query && !queries.includes(query)) {
         queries.push(query);
@@ -460,9 +468,9 @@
 
   function parseJapaneseAddress(address) {
     const normalized = normalizeAddress(address);
-    const stateMatch = normalized.match(/^(東京都|北海道|(?:京都|大阪)府|.{2,3}県)/);
+    const stateMatch = normalized.match(PREFECTURE_PATTERN);
     const state = stateMatch ? stateMatch[1] : "";
-    const restAfterState = state ? normalized.slice(state.length) : normalized;
+    const restAfterState = state ? normalized.slice(stateMatch.index + state.length) : normalized;
     const cityMatch = restAfterState.match(/^(.+?[市区町村])/);
     const city = cityMatch ? cityMatch[1] : "";
     const rest = city ? restAfterState.slice(city.length) : restAfterState;
@@ -725,6 +733,7 @@
     elements.stopMinutes = document.getElementById("stop-minutes");
     elements.stops = document.getElementById("stops");
     elements.addStop = document.getElementById("add-stop");
+    elements.calculationSummary = document.getElementById("calculation-summary");
     elements.calculateRoute = document.getElementById("calculate-route");
     elements.progress = document.getElementById("progress");
     elements.progressText = document.getElementById("progress-text");
@@ -766,6 +775,11 @@
     elements.saveCurrentLocation.addEventListener("click", saveCurrentLocationAsFacility);
     elements.useSavedLocation.addEventListener("click", useSavedFacilityLocation);
     elements.clearSavedLocation.addEventListener("click", clearSavedFacilityLocation);
+    elements.facilityAddress.addEventListener("input", () => {
+      updateCalculationSummary();
+      invalidateActiveRoute("事業所住所を変更しました。もう一度ルートを計算してください。");
+    });
+    elements.returnToStart.addEventListener("change", () => invalidateActiveRoute("周回ルートの設定を変更しました。もう一度ルートを計算してください。"));
     elements.departureTime.addEventListener("input", refreshActiveRouteSchedule);
     elements.stopMinutes.addEventListener("input", refreshActiveRouteSchedule);
   }
@@ -815,7 +829,8 @@
 
   function updateActiveCourseTargetDate(event) {
     getActiveCourse().targetDate = event.target.value.trim();
-    refreshCourseResultLabels();
+    updateCalculationSummary();
+    invalidateActiveRoute("ルート計算日を変更しました。もう一度ルートを計算してください。");
   }
 
   function loadSavedCourses() {
@@ -867,6 +882,7 @@
     renderCourseTabs();
     renderCourseName();
     renderStops();
+    updateCalculationSummary();
     renderStoredCourseResult();
   }
 
@@ -890,6 +906,21 @@
     renderPrintSheet(course.lastRoute.facilityAddress, course.lastRoute.ordered, course.lastRoute.returnToStart, course.lastRoute.schedule || []);
   }
 
+  function invalidateActiveRoute(message) {
+    const course = getActiveCourse();
+    if (!course || !course.lastRoute) {
+      return;
+    }
+    course.lastRoute = null;
+    elements.placeholder.hidden = false;
+    elements.result.hidden = true;
+    clearMapLayer();
+    clearFailedAddresses();
+    if (message) {
+      showFormMessage(message);
+    }
+  }
+
   function setMode(mode) {
     state.mode = mode;
     elements.modePickup.classList.toggle("is-active", mode === "pickup");
@@ -907,11 +938,22 @@
   function loadSavedFacilityLocation() {
     try {
       const raw = window.localStorage.getItem(SAVED_FACILITY_KEY);
-      state.savedFacilityLocation = raw ? JSON.parse(raw) : null;
+      state.savedFacilityLocation = normalizeSavedFacilityLocation(raw ? JSON.parse(raw) : null);
     } catch (error) {
       state.savedFacilityLocation = null;
     }
     updateLocationStatus();
+  }
+
+  function normalizeSavedFacilityLocation(saved) {
+    if (!saved || !Number.isFinite(saved.lat) || !Number.isFinite(saved.lng)) {
+      return null;
+    }
+    return {
+      lat: saved.lat,
+      lng: saved.lng,
+      savedAt: saved.savedAt || ""
+    };
   }
 
   function updateLocationStatus(message, type) {
@@ -944,6 +986,7 @@
         state.useSavedFacilityLocation = true;
         window.localStorage.setItem(SAVED_FACILITY_KEY, JSON.stringify(saved));
         elements.saveCurrentLocation.disabled = false;
+        updateCalculationSummary();
         updateLocationStatus("現在地を事業所位置として保存しました。次回以降もこの端末で使えます。");
       },
       () => {
@@ -960,6 +1003,7 @@
       return;
     }
     state.useSavedFacilityLocation = true;
+    updateCalculationSummary();
     updateLocationStatus("住所欄が空の時、保存した事業所位置を出発・帰着地として使います。");
   }
 
@@ -967,23 +1011,28 @@
     state.savedFacilityLocation = null;
     state.useSavedFacilityLocation = false;
     window.localStorage.removeItem(SAVED_FACILITY_KEY);
+    updateCalculationSummary();
     updateLocationStatus("保存した事業所位置を削除しました。");
   }
 
   function addStop(name = "", place = "", address = "", restDays = []) {
     const course = getActiveCourse();
     course.stops.push(createStop(course, name, place, address, restDays));
+    invalidateActiveRoute("利用者を追加しました。もう一度ルートを計算してください。");
     renderStops();
+    updateCalculationSummary();
   }
 
   function removeStop(id) {
     const course = getActiveCourse();
     course.stops = course.stops.filter((stop) => stop.id !== id);
+    invalidateActiveRoute("利用者を削除しました。もう一度ルートを計算してください。");
     if (course.stops.length === 0) {
       addStop();
       return;
     }
     renderStops();
+    updateCalculationSummary();
   }
 
   function renderStops() {
@@ -1010,14 +1059,19 @@
 
       row.querySelector(".stop-name").addEventListener("input", (event) => {
         stop.name = event.target.value;
+        invalidateActiveRoute("利用者名を変更しました。もう一度ルートを計算してください。");
       });
       row.querySelector(".stop-place").addEventListener("input", (event) => {
         stop.place = event.target.value;
         clearRowError(row);
+        updateCalculationSummary();
+        invalidateActiveRoute("場所名を変更しました。もう一度ルートを計算してください。");
       });
       row.querySelector(".stop-address").addEventListener("input", (event) => {
         stop.address = event.target.value;
         clearRowError(row);
+        updateCalculationSummary();
+        invalidateActiveRoute("住所を変更しました。もう一度ルートを計算してください。");
       });
       row.querySelectorAll(".rest-day-checkbox").forEach((checkbox) => {
         checkbox.addEventListener("change", () => {
@@ -1027,17 +1081,43 @@
           if (summary) {
             summary.textContent = buildRestSummary(stop);
           }
+          updateCalculationSummary();
+          invalidateActiveRoute("休み日を変更しました。もう一度ルートを計算してください。");
         });
       });
       row.querySelector(".delete-stop").addEventListener("click", () => removeStop(stop.id));
       elements.stops.appendChild(row);
     });
+    updateCalculationSummary();
+  }
+
+  function updateCalculationSummary() {
+    if (!elements.calculationSummary) {
+      return;
+    }
+    const facilityReady = Boolean(elements.facilityAddress.value.trim()) || Boolean(state.useSavedFacilityLocation && state.savedFacilityLocation);
+    const course = getActiveCourse();
+    const targetDay = getTargetDay(course);
+    const stopCount = course.stops.filter((stop) => buildStopSearchQueries(stop).length > 0 && !(targetDay && isStopRestOnDay(stop, targetDay))).length;
+    if (facilityReady && stopCount > 0) {
+      elements.calculationSummary.textContent = `事業所と送迎利用者${stopCount}件で計算します。`;
+      elements.calculationSummary.classList.add("is-ready");
+      return;
+    }
+    if (!facilityReady && stopCount === 0) {
+      elements.calculationSummary.textContent = "事業所住所と送迎利用者を入力したら計算できます。";
+    } else if (!facilityReady) {
+      elements.calculationSummary.textContent = `送迎利用者${stopCount}件が入力されています。次に事業所住所を入れてください。`;
+    } else {
+      elements.calculationSummary.textContent = "事業所住所は入力済みです。次に送迎利用者の場所名または住所を入れてください。";
+    }
+    elements.calculationSummary.classList.remove("is-ready");
   }
 
   function buildRestSummary(stop) {
     const days = normalizeRestDays(stop.restDays);
     if (days.length === 0) {
-      return "休み日を選択";
+      return "休み日を選択（任意）";
     }
     return `休み：${days.join("、")}日`;
   }
@@ -1077,15 +1157,15 @@
     clearAddressErrors();
 
     if (!facilityAddress && !useSavedFacility) {
-      showFormMessage("事業所の住所を入力するか、保存した事業所位置を使ってください。");
+      showFormMessage("Step 2：事業所の住所を入力するか、保存した事業所位置を使ってください。");
       elements.facilityAddress.focus();
       return;
     }
 
     if (activeStops.length === 0) {
       showFormMessage(targetDay
-        ? "ルート計算日に送迎対象となる利用者の場所名または住所を1件以上入力してください。休み日にチェックが入っている利用者は計算から外れます。"
-        : "立ち寄り先の場所名または住所を1件以上入力してください。");
+        ? "Step 3：ルート計算日に送迎対象となる利用者の場所名または住所を1件以上入力してください。休み日にチェックが入っている利用者は計算から外れます。"
+        : "Step 3：利用者の場所名または住所を1件以上入力してください。");
       return;
     }
 
@@ -1094,7 +1174,7 @@
       setProgressText("事業所の場所を調べています...");
       const facility = await resolveFacilityLocation(facilityAddress, useSavedFacility);
       if (!facility) {
-        showFormMessage("事業所の住所が見つかりませんでした。市町村名を含める、施設名にする、または丁目までの住所に直してみてください。");
+        showFormMessage("Step 2：事業所の住所が見つかりませんでした。市町村名を含める、施設名にする、または丁目までの住所に直してみてください。");
         elements.facilityAddress.focus();
         return;
       }
@@ -1136,7 +1216,7 @@
       }
 
       if (foundStops.length === 0) {
-        showFormMessage("立ち寄り先の場所名・住所が1件も見つかりませんでした。赤色の行を修正してください。");
+        showFormMessage("Step 3：利用者の場所名・住所が1件も見つかりませんでした。赤色の行を修正してください。");
         return;
       }
 
@@ -1246,7 +1326,7 @@
     const manualArrivalTimes = {};
     const schedule = roadRoute ? buildArrivalSchedule(departureTime, roadRoute.legs, stopMinutes, manualArrivalTimes, ordered) : [];
     const course = getActiveCourse();
-    course.lastRoute = { facility, facilityAddress, ordered, returnToStart, failedStops, roadRoute, schedule, manualArrivalTimes, optimizationMode };
+    course.lastRoute = { facility, facilityAddress, ordered, returnToStart, failedStops, roadRoute, schedule, manualArrivalTimes, departureTime, stopMinutes, optimizationMode };
     course.stops = sortStopsByRouteOrder(course.stops, ordered);
     renderStops();
     (failedStops || []).forEach((stop) => markAddressError(stop.id));
@@ -1286,6 +1366,8 @@
   function updateRouteSchedule(route) {
     const departureTime = elements.departureTime.value;
     const stopMinutes = Number.parseInt(elements.stopMinutes.value, 10) || 0;
+    route.departureTime = departureTime;
+    route.stopMinutes = stopMinutes;
     route.schedule = buildArrivalSchedule(
       departureTime,
       route.roadRoute.legs,
@@ -1672,7 +1754,7 @@
       : course.stops.filter((stop) => String(stop.name || stop.place || stop.address || "").trim());
     const routeSchedule = Array.isArray(route && route.schedule) ? route.schedule : [];
     const rows = routeStops.map((stop, index) => buildAttendancePrintRow(stop, index, printDays, routeSchedule[index])).join("");
-    const startTime = elements.departureTime.value || "";
+    const startTime = route && route.departureTime ? route.departureTime : "";
     const facility = route && route.facilityAddress ? route.facilityAddress : elements.facilityAddress.value.trim();
     const returnLabel = route && route.returnToStart ? "周回" : "片道";
     return `

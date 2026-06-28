@@ -55,23 +55,32 @@
       </div>
     </header>
 
-    <section class="course-panel" aria-label="送迎コースの切り替え">
-      <div id="course-tabs" class="course-tabs" role="tablist" aria-label="コース一覧"></div>
+    <section class="course-panel step-panel" aria-label="送迎コースの切り替え">
+      <div class="course-tabs-area">
+        <div class="step-heading">
+          <span class="step-number">1</span>
+          <span>
+            <strong>使う車・日付を選ぶ</strong>
+            <small>まずコースを選びます。連絡先や対象月は印刷用に必要な時だけ入れます。</small>
+          </span>
+        </div>
+        <div id="course-tabs" class="course-tabs" role="tablist" aria-label="コース一覧"></div>
+      </div>
       <div class="course-settings">
         <div class="course-name-box">
-          <label class="field-label" for="course-name">選択中のコース名</label>
+          <label class="field-label" for="course-name">選択中のコース名 <span class="field-badge">任意</span></label>
           <input id="course-name" type="text" maxlength="24" placeholder="例：1号車 / Aコース">
         </div>
         <div class="course-contact-box">
-          <label class="field-label" for="course-contact">コース連絡先</label>
+          <label class="field-label" for="course-contact">コース連絡先 <span class="field-badge">任意</span></label>
           <input id="course-contact" type="text" maxlength="60" inputmode="tel" placeholder="例：090-0000-0000 / 担当者名">
         </div>
         <div class="course-month-box">
-          <label class="field-label" for="course-month">送迎表の対象月</label>
+          <label class="field-label" for="course-month">送迎表の対象月 <span class="field-badge">印刷用</span></label>
           <input id="course-month" type="month">
         </div>
         <div class="course-date-box">
-          <label class="field-label" for="course-target-date">ルート計算日</label>
+          <label class="field-label" for="course-target-date">ルート計算日 <span class="field-badge is-required">休み判定</span></label>
           <input id="course-target-date" type="date">
         </div>
         <div class="course-save-actions">
@@ -84,40 +93,53 @@
 
     <main class="workbench">
       <section class="input-column" aria-label="ルート条件の入力">
-        <div class="panel">
+        <div class="panel step-panel">
+          <div class="step-heading">
+            <span class="step-number">2</span>
+            <span>
+              <strong>事業所と出発時刻を入れる</strong>
+              <small>出発・帰着地、出発時刻、停車時間を設定します。</small>
+            </span>
+          </div>
           <div class="section-kicker"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-home"></use></svg>事業所</div>
           <h2>出発・帰着の場所</h2>
-          <label class="field-label" for="facility-address">事業所の住所</label>
+          <label class="field-label" for="facility-address">事業所の住所 <span class="field-badge is-required">必須</span></label>
           <input id="facility-address" type="text" autocomplete="street-address" placeholder="例：沖縄県名護市東江1-1-1">
-          <div class="location-tools">
-            <button type="button" id="save-current-location" class="small-button"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#icon-location"></use></svg>現在地を事業所として保存</button>
-            <button type="button" id="use-saved-location" class="small-button"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#icon-pin"></use></svg>保存した事業所位置を使う</button>
-            <button type="button" id="clear-saved-location" class="small-button ghost-button">保存位置を削除</button>
-          </div>
-          <p id="location-status" class="mini-status">保存した事業所位置はありません。</p>
+          <details class="optional-tools">
+            <summary>現在地を事業所として使う場合</summary>
+            <div class="location-tools">
+              <button type="button" id="save-current-location" class="small-button"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#icon-location"></use></svg>現在地を事業所として保存</button>
+              <button type="button" id="use-saved-location" class="small-button"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#icon-pin"></use></svg>保存した事業所位置を使う</button>
+              <button type="button" id="clear-saved-location" class="small-button ghost-button">保存位置を削除</button>
+            </div>
+            <p id="location-status" class="mini-status">保存した事業所位置はありません。</p>
+          </details>
           <label class="checkbox-line" for="return-to-start">
             <input type="checkbox" id="return-to-start" checked>
             <span>最後に事業所へ戻る（周回ルート）</span>
           </label>
-        </div>
-
-        <div class="panel">
-          <div class="section-kicker"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-clock"></use></svg>時刻</div>
-          <h2>到着予定の計算</h2>
+          <div class="section-kicker section-kicker-inline"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-clock"></use></svg>時刻</div>
           <div class="time-grid">
             <div>
-              <label class="field-label" for="departure-time">出発時刻</label>
+              <label class="field-label" for="departure-time">出発時刻 <span class="field-badge">任意</span></label>
               <input id="departure-time" type="time">
             </div>
             <div>
-              <label class="field-label" for="stop-minutes">1件あたり停車時間</label>
+              <label class="field-label" for="stop-minutes">1件あたり停車時間 <span class="field-badge">任意</span></label>
               <input id="stop-minutes" type="number" min="0" max="60" step="1" value="5">
             </div>
           </div>
           <p class="mini-status">道路距離と走行時間はOSRMの目安です。渋滞や信号待ちは反映されません。</p>
         </div>
 
-        <div class="panel">
+        <div class="panel step-panel">
+          <div class="step-heading">
+            <span class="step-number">3</span>
+            <span>
+              <strong>利用者と休み日を入れる</strong>
+              <small>氏名、場所名、住所を入力します。休み日は必要な人だけ開いてチェックします。</small>
+            </span>
+          </div>
           <div class="section-kicker"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-people"></use></svg><span id="stops-kicker">お迎えする利用者</span></div>
           <div class="section-heading">
             <h2>送迎利用者リスト</h2>
@@ -126,9 +148,10 @@
           <div id="stops" class="stops-list" aria-live="polite"></div>
           <button type="button" id="add-stop" class="secondary-button"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-plus"></use></svg>利用者を追加</button>
 
+          <p id="calculation-summary" class="calculation-summary">事業所住所と送迎利用者を入力したら計算できます。</p>
           <button type="button" id="calculate-route" class="primary-button">
             <svg class="icon" width="22" height="22" aria-hidden="true"><use href="#icon-route"></use></svg>
-            <span id="calculate-label">ルートを計算する</span>
+            <span id="calculate-label">入力内容を確認してルートを計算</span>
           </button>
           <div id="progress" class="progress" role="status" aria-live="polite" aria-atomic="true">
             <span class="spinner" aria-hidden="true"></span>
@@ -141,16 +164,24 @@
       <section class="result-column" aria-label="計算結果">
         <div id="placeholder" class="panel placeholder">
           <div class="section-kicker"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-route"></use></svg>使い方</div>
-          <h2>3ステップでルート表まで作れます</h2>
+          <h2>4ステップで送迎表まで作れます</h2>
           <ol>
-            <li><strong>事業所の住所</strong>を入力します。</li>
+            <li><strong>コースと日付</strong>を選びます。</li>
+            <li><strong>事業所と出発時刻</strong>を入力します。</li>
             <li><strong>利用者名、場所名、住所</strong>を追加します。</li>
-            <li><strong>ルートを計算する</strong>を押します。</li>
+            <li><strong>ルートを計算</strong>して、必要なら順番や時刻を調整します。</li>
           </ol>
-          <p>結果欄に地図、巡回順、概算距離、Googleマップ起動リンク、印刷用ルート表が表示されます。</p>
+          <p>結果欄に地図、巡回順、到着予定、Googleマップ起動リンク、印刷用送迎表が表示されます。</p>
         </div>
 
-        <div id="result" class="panel result-panel" hidden>
+        <div id="result" class="panel result-panel step-panel" hidden>
+          <div class="step-heading">
+            <span class="step-number">4</span>
+            <span>
+              <strong>計算結果を確認・調整する</strong>
+              <small>順番はドラッグや上下ボタンで変更できます。時刻欄も必要な地点だけ調整できます。</small>
+            </span>
+          </div>
           <div class="section-kicker"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-map"></use></svg>計算結果</div>
           <h2 id="result-title">時間優先の送迎ルート</h2>
           <div id="map" aria-label="送迎ルートの地図"></div>

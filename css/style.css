@@ -195,6 +195,51 @@ h1 {
   box-shadow: var(--shadow);
 }
 
+.course-tabs-area {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.step-panel {
+  position: relative;
+}
+
+.step-heading {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+.step-heading strong {
+  display: block;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.step-heading small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.step-number {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--blue);
+  font-weight: 900;
+  box-shadow: 0 4px 10px rgba(26, 115, 232, 0.22);
+}
+
 .course-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -274,6 +319,10 @@ h1 {
   font-weight: 900;
 }
 
+.section-kicker-inline {
+  margin-top: 18px;
+}
+
 .section-kicker .icon {
   padding: 4px;
   width: 26px;
@@ -317,6 +366,25 @@ h2 {
   font-weight: 900;
 }
 
+.field-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  margin-left: 5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: #eef3fb;
+  font-size: 0.68rem;
+  font-weight: 900;
+  vertical-align: middle;
+}
+
+.field-badge.is-required {
+  color: var(--blue-dark);
+  background: var(--blue-soft);
+}
+
 input[type="text"],
 input[type="time"],
 input[type="date"],
@@ -350,6 +418,21 @@ input[type="number"]:focus {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
+}
+
+.optional-tools {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.optional-tools summary {
+  color: var(--blue-dark);
+  font-size: 0.82rem;
+  font-weight: 900;
+  cursor: pointer;
 }
 
 .small-button {
@@ -551,6 +634,23 @@ input[type="number"]:focus {
 
 .secondary-button:hover {
   background: #dce8fd;
+}
+
+.calculation-summary {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: #fbfdff;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.calculation-summary.is-ready {
+  color: var(--green-dark);
+  border-color: #b7dfc3;
+  background: var(--green-soft);
 }
 
 .primary-button {

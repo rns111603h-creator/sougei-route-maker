@@ -29,7 +29,7 @@ assert.strictEqual(JSON.stringify(courses.map((course) => course.name)), JSON.st
 assert.strictEqual(courses[0].contact, "", "course contact should start empty");
 assert.strictEqual(courses[0].targetMonth, "", "course target month should start empty");
 assert.strictEqual(courses[0].targetDate, "", "course target date should start empty");
-assert.strictEqual(courses[0].stops.length, 3, "each course should start with three blank stop rows");
+assert.strictEqual(courses[0].stops.length, 1, "each course should start with one blank stop row");
 assert.notStrictEqual(courses[0].stops[0].id, courses[1].stops[0].id, "stop ids should be unique across courses");
 assert.strictEqual(courses[0].stops[0].service, undefined, "stop service should not be part of the route input");
 assert.strictEqual(courses[0].stops[0].scheduledTime, undefined, "manual scheduled time should not be part of the route input");
@@ -47,14 +47,17 @@ const stopWithPlaceAndAddress = {
 };
 assert.strictEqual(
   JSON.stringify(utils.buildStopSearchQueries(stopWithPlaceAndAddress)),
-  JSON.stringify(["那覇空港", "沖縄県那覇市鏡水150"]),
-  "place name should be searched before address"
+  JSON.stringify(["那覇空港 沖縄県那覇市鏡水150", "沖縄県那覇市鏡水150"]),
+  "place name should be searched with the address context before falling back to address"
 );
 assert.strictEqual(
   utils.getStopDisplayName(stopWithPlaceAndAddress),
   "那覇空港",
   "print and route labels should prefer place name"
 );
+const combinedCandidate = utils.buildGeocodeCandidates("那覇空港 沖縄県那覇市鏡水150")[0];
+assert.strictEqual(combinedCandidate.parts.state, "沖縄県", "combined place and address searches should keep address context");
+assert.strictEqual(combinedCandidate.parts.city, "那覇市", "combined place and address searches should keep city context");
 
 const stopWithoutPlace = {
   name: "利用者B",
