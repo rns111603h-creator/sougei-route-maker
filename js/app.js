@@ -143,6 +143,10 @@
     return Number.isInteger(targetDay) && normalizeRestDays(stop.restDays).includes(targetDay);
   }
 
+  function getPrintPlaceName(stop) {
+    return String(stop.place || "").trim();
+  }
+
   function getTargetDay(course) {
     const date = String(course.targetDate || "").trim();
     if (date) {
@@ -1761,7 +1765,7 @@
       .map((course) => ({
         course,
         route: course === activeCourse
-          ? { facilityAddress, ordered, returnToStart, schedule }
+          ? { facilityAddress, ordered, returnToStart, schedule, departureTime: activeCourse.lastRoute && activeCourse.lastRoute.departureTime }
           : course.lastRoute
       }))
       .filter(({ course }) => courseHasPrintableStops(course));
@@ -1780,65 +1784,131 @@
   }
 
   function buildPrintCoursePage(course, route) {
-    const printDays = getCoursePrintDays(course);
+    const printDays = getCoursePrintWeek(course);
     const routeStops = Array.isArray(route && route.ordered) && route.ordered.length > 0
       ? route.ordered
       : course.stops.filter((stop) => String(stop.name || stop.place || stop.address || "").trim());
     const routeSchedule = Array.isArray(route && route.schedule) ? route.schedule : [];
     const rows = routeStops.map((stop, index) => buildAttendancePrintRow(stop, index, printDays, routeSchedule[index])).join("");
     const startTime = route && route.departureTime ? route.departureTime : "";
-    const facility = route && route.facilityAddress ? route.facilityAddress : elements.facilityAddress.value.trim();
-    const returnLabel = route && route.returnToStart ? "周回" : "片道";
+    const contact = String(course.contact || "").trim();
     return `
       <article class="print-course-page">
-        <h2>${escapeHtml(course.name)} ${escapeHtml(formatPrintMonthLabel(course))} ${state.mode === "pickup" ? "お迎え" : "お送り"}送迎表</h2>
-        <div class="print-meta">
-          <div>事業所：<span>${escapeHtml(facility || " ")}</span></div>
-          <div>連絡先：<span>${escapeHtml(course.contact || " ")}</span></div>
-          <div>日付：<span> </span></div>
-          <div>運転者：<span> </span></div>
-          <div>車両：<span> </span></div>
-          <div>出発：<span>${escapeHtml(startTime || " ")}</span></div>
-          <div>区分：<span>${escapeHtml(returnLabel)}</span></div>
+        <h2>☆${escapeHtml(course.name)} ${escapeHtml(formatPrintMonthLabel(course))}の送迎表☆${contact ? `TEL：${escapeHtml(contact)}` : ""}</h2>
+        <div class="print-driver-row">
+          <span>送迎者</span>
+          <span class="print-driver-line"></span>
+          <span class="print-mode">${escapeHtml(state.mode === "pickup" ? "お迎え" : "お送り")}</span>
+          <span>出発</span>
+          <span class="print-start-time">${escapeHtml(startTime || " ")}</span>
         </div>
         <div class="print-table-wrap">
           <table class="attendance-print-table">
+            <colgroup>
+              <col class="print-col-order">
+              <col class="print-col-name">
+              <col class="print-col-place">
+              ${printDays.map(() => "<col class=\"print-col-day\">").join("")}
+            </colgroup>
             <thead>
               <tr>
-                <th class="print-order">順</th>
+                <th class="print-order">No</th>
                 <th class="print-name">利用者</th>
-                <th class="print-place">場所</th>
-                <th class="print-address">住所</th>
-                <th class="print-time">予定時刻</th>
-                ${printDays.map((day) => `<th class="print-day">${day}</th>`).join("")}
+                <th class="print-place">日にち　場所・時間</th>
+                ${printDays.map((day) => buildPrintDayHeader(day)).join("")}
               </tr>
             </thead>
-            <tbody>${rows || `<tr><td colspan="${printDays.length + 5}">利用者情報がありません。</td></tr>`}</tbody>
+            <tbody>${rows || `<tr><td colspan="${printDays.length + 3}" class="print-empty-row">利用者情報がありません。</td></tr>`}</tbody>
           </table>
         </div>
-        <p class="print-note">□は送迎予定、休は休み予定です。順番と時刻は道路ルートをもとにした目安です。道路状況や安全確認を優先してください。</p>
+        <p class="print-note">枠内は送迎利用チェック欄です。休み予定は「休」、祝日は灰色で表示します。順番と時刻は道路ルートをもとにした目安です。</p>
       </article>
     `;
   }
 
   function buildAttendancePrintRow(stop, index, printDays, scheduleItem) {
     const plannedTime = scheduleItem && scheduleItem.arrivalTime ? scheduleItem.arrivalTime : "";
+    const placeName = getPrintPlaceName(stop);
     return `
-      <tr>
-        <td class="print-order">${index + 1}</td>
+      <tr class="print-user-row">
+        <td class="print-order" rowspan="2">${index + 1}</td>
         <td class="print-name">${escapeHtml(stop.name || "")}</td>
-        <td class="print-place">${escapeHtml(String(stop.place || "").trim())}</td>
-        <td class="print-address">${escapeHtml(getStopAddressLabel(stop))}</td>
-        <td class="print-time">${escapeHtml(plannedTime)}</td>
-        ${printDays.map((day) => `<td class="print-day">${isStopRestOnDay(stop, day) ? "休" : "□"}</td>`).join("")}
+        <td class="print-place">${escapeHtml(placeName)}</td>
+        ${printDays.map((day) => buildPrintUsageCell(stop, day, true)).join("")}
+      </tr>
+      <tr class="print-time-row">
+        <td class="print-name print-name-sub"></td>
+        <td class="print-place print-time">${escapeHtml(plannedTime)}</td>
+        ${printDays.map((day) => buildPrintUsageCell(stop, day, false)).join("")}
       </tr>
     `;
   }
 
-  function getCoursePrintDays(course) {
+  function buildPrintDayHeader(day) {
+    const classes = ["print-day"];
+    if (!day.day) {
+      classes.push("is-outside-month");
+    }
+    if (day.isHoliday) {
+      classes.push("is-holiday");
+    }
+    const dayNumber = day.day ? String(day.day) : "";
+    const holidayLabel = day.holidayName ? `<span class="print-holiday-name">${escapeHtml(day.holidayName)}</span>` : "";
+    return `<th class="${classes.join(" ")}"><span>${escapeHtml(day.weekday)}</span><span>${escapeHtml(dayNumber)}</span>${holidayLabel}</th>`;
+  }
+
+  function buildPrintUsageCell(stop, day, isFirstRow) {
+    const classes = ["print-day"];
+    if (!day.day) {
+      classes.push("is-outside-month");
+    }
+    if (day.isHoliday) {
+      classes.push("is-holiday");
+    }
+    const content = getPrintUsageCellContent(stop, day, isFirstRow);
+    return `<td class="${classes.join(" ")}">${content}</td>`;
+  }
+
+  function getPrintUsageCellContent(stop, day, isFirstRow) {
+    if (!day.day) {
+      return "";
+    }
+    if (isStopRestOnDay(stop, day.day)) {
+      return isFirstRow ? "<span class=\"print-rest-mark\">休</span>" : "";
+    }
+    return "<span class=\"print-check-frame\"><span></span><span></span><span></span></span>";
+  }
+
+  function getCoursePrintWeek(course) {
     const [year, month] = getCoursePrintYearMonth(course);
-    const daysInMonth = new Date(year, month, 0).getDate();
-    return Array.from({ length: daysInMonth }, (_, index) => index + 1);
+    const target = getCoursePrintTargetDate(course, year, month);
+    const weekStart = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+    const dayOfWeek = weekStart.getDay();
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    weekStart.setDate(weekStart.getDate() - daysFromMonday);
+
+    return Array.from({ length: 5 }, (_, index) => {
+      const date = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + index);
+      const inTargetMonth = date.getFullYear() === year && date.getMonth() + 1 === month;
+      const holidayName = inTargetMonth ? getJapaneseHolidayName(date) : "";
+      return {
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+        day: inTargetMonth ? date.getDate() : null,
+        weekday: ["日", "月", "火", "水", "木", "金", "土"][date.getDay()],
+        isHoliday: Boolean(holidayName),
+        holidayName
+      };
+    });
+  }
+
+  function getCoursePrintTargetDate(course, fallbackYear, fallbackMonth) {
+    const source = String(course.targetDate || "").trim();
+    const match = source.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) {
+      return new Date(Number.parseInt(match[1], 10), Number.parseInt(match[2], 10) - 1, Number.parseInt(match[3], 10));
+    }
+    return new Date(fallbackYear, fallbackMonth - 1, 1);
   }
 
   function getCoursePrintYearMonth(course) {
@@ -1854,6 +1924,105 @@
   function formatPrintMonthLabel(course) {
     const [year, month] = getCoursePrintYearMonth(course);
     return `${year}年${month}月`;
+  }
+
+  function getJapaneseHolidayName(date) {
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const holidays = getJapaneseHolidays(year);
+    const key = formatDateKey(year, month, day);
+    return holidays.get(key) || "";
+  }
+
+  function getJapaneseHolidays(year) {
+    const holidays = new Map();
+    const addHoliday = (month, day, name) => {
+      holidays.set(formatDateKey(year, month, day), name);
+    };
+
+    addHoliday(1, 1, "元日");
+    addHoliday(2, 11, "建国記念の日");
+    if (year >= 2020) {
+      addHoliday(2, 23, "天皇誕生日");
+    }
+    addHoliday(4, 29, "昭和の日");
+    addHoliday(5, 3, "憲法記念日");
+    addHoliday(5, 4, "みどりの日");
+    addHoliday(5, 5, "こどもの日");
+    addHoliday(8, 11, "山の日");
+    addHoliday(11, 3, "文化の日");
+    addHoliday(11, 23, "勤労感謝の日");
+
+    addHoliday(1, nthWeekdayOfMonth(year, 1, 1, 2), "成人の日");
+    addHoliday(7, nthWeekdayOfMonth(year, 7, 1, 3), "海の日");
+    addHoliday(9, nthWeekdayOfMonth(year, 9, 1, 3), "敬老の日");
+    addHoliday(10, nthWeekdayOfMonth(year, 10, 1, 2), "スポーツの日");
+    addHoliday(3, calculateVernalEquinoxDay(year), "春分の日");
+    addHoliday(9, calculateAutumnalEquinoxDay(year), "秋分の日");
+
+    applySubstituteHolidays(holidays, year);
+    applyCitizensHolidays(holidays, year);
+    return holidays;
+  }
+
+  function applySubstituteHolidays(holidays, year) {
+    const holidayEntries = Array.from(holidays.keys()).sort();
+    holidayEntries.forEach((key) => {
+      const date = parseDateKey(key);
+      if (date.getDay() !== 0) {
+        return;
+      }
+      let substitute = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+      while (substitute.getFullYear() === year && holidays.has(formatDateObjectKey(substitute))) {
+        substitute.setDate(substitute.getDate() + 1);
+      }
+      if (substitute.getFullYear() === year) {
+        holidays.set(formatDateObjectKey(substitute), "振替休日");
+      }
+    });
+  }
+
+  function applyCitizensHolidays(holidays, year) {
+    const date = new Date(year, 0, 2);
+    while (date.getFullYear() === year) {
+      const key = formatDateObjectKey(date);
+      if (!holidays.has(key)) {
+        const previous = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
+        const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+        if (holidays.has(formatDateObjectKey(previous)) && holidays.has(formatDateObjectKey(next))) {
+          holidays.set(key, "国民の休日");
+        }
+      }
+      date.setDate(date.getDate() + 1);
+    }
+  }
+
+  function nthWeekdayOfMonth(year, month, weekday, nth) {
+    const date = new Date(year, month - 1, 1);
+    const offset = (weekday - date.getDay() + 7) % 7;
+    return 1 + offset + (nth - 1) * 7;
+  }
+
+  function calculateVernalEquinoxDay(year) {
+    return Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+  }
+
+  function calculateAutumnalEquinoxDay(year) {
+    return Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+  }
+
+  function formatDateKey(year, month, day) {
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  function formatDateObjectKey(date) {
+    return formatDateKey(date.getFullYear(), date.getMonth() + 1, date.getDate());
+  }
+
+  function parseDateKey(key) {
+    const [year, month, day] = key.split("-").map((value) => Number.parseInt(value, 10));
+    return new Date(year, month - 1, day);
   }
 
   window.RouteMakerUtils = {
@@ -1872,8 +2041,11 @@
     getStopDisplayName,
     getRoutePrimaryName,
     getRouteDetailLines,
+    getPrintPlaceName,
     parseRestDays,
     isStopRestOnDay,
+    getCoursePrintWeek,
+    getJapaneseHolidayName,
     sortStopsByRouteOrder,
     moveItemInList,
     serializeCoursesForStorage,

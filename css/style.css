@@ -1219,8 +1219,8 @@ input[type="number"]:focus {
 
 @media print {
   @page {
-    size: A4 landscape;
-    margin: 8mm;
+    size: A4 portrait;
+    margin: 8mm 7mm;
   }
 
   body {
@@ -1234,34 +1234,50 @@ input[type="number"]:focus {
   #print-sheet {
     display: block;
     color: #000;
-    font-size: 8.5pt;
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    font-size: 9pt;
   }
 
   .print-course-page {
     page-break-after: always;
+    break-after: page;
+    width: 100%;
   }
 
   .print-course-page:last-child {
     page-break-after: auto;
+    break-after: auto;
   }
 
   #print-sheet h2 {
-    margin: 0 0 4px;
+    margin: 0 0 6px;
+    min-height: 22px;
     font-size: 15pt;
+    font-weight: 700;
+    text-align: left;
   }
 
-  .print-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 18px;
-    margin: 6px 0 8px;
-    font-size: 8.5pt;
+  .print-driver-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto 64px;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+    margin-bottom: 6px;
+    font-size: 10pt;
   }
 
-  .print-meta span {
-    display: inline-block;
-    min-width: 126px;
+  .print-driver-line,
+  .print-start-time {
+    min-height: 18px;
     border-bottom: 1px solid #000;
+  }
+
+  .print-mode {
+    min-width: 54px;
+    padding: 1px 6px;
+    border: 1px solid #000;
+    text-align: center;
   }
 
   .print-table-wrap {
@@ -1273,53 +1289,129 @@ input[type="number"]:focus {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
+    border: 2px solid #000;
   }
 
   #print-sheet th,
   #print-sheet td {
-    padding: 3px 4px;
-    border: 1px solid #333;
-    text-align: left;
-    vertical-align: top;
+    padding: 2px 3px;
+    border: 1px solid #000;
+    color: #000;
+    text-align: center;
+    vertical-align: middle;
     word-break: break-word;
   }
 
   #print-sheet th {
-    background: #eee;
-    font-size: 7.5pt;
+    height: 28px;
+    background: #fff;
+    font-size: 9pt;
+    font-weight: 700;
+  }
+
+  .print-col-order {
+    width: 8mm;
+  }
+
+  .print-col-name {
+    width: 34mm;
+  }
+
+  .print-col-place {
+    width: 42mm;
+  }
+
+  .print-col-day {
+    width: 21mm;
   }
 
   .print-order {
-    width: 22px;
     text-align: center;
+    font-weight: 700;
   }
 
-  .print-name {
-    width: 80px;
+  .print-name,
+  .print-place {
+    text-align: center;
+    white-space: pre-line;
   }
 
   .print-place {
-    width: 82px;
-  }
-
-  .print-address {
-    width: 120px;
+    font-size: 8.6pt;
+    line-height: 1.2;
   }
 
   .print-time {
-    width: 46px;
-    text-align: center;
+    font-size: 10pt;
+    font-weight: 700;
+  }
+
+  .print-user-row td,
+  .print-time-row td {
+    height: 14mm;
+  }
+
+  .print-name-sub {
+    border-top-color: transparent !important;
   }
 
   .print-day {
-    width: 18px;
     text-align: center;
-    font-size: 7pt;
+    font-size: 8.2pt;
+  }
+
+  #print-sheet th.print-day {
+    padding: 1px 2px;
+    line-height: 1.05;
+  }
+
+  #print-sheet th.print-day span {
+    display: block;
+  }
+
+  .print-holiday-name {
+    margin-top: 1px;
+    font-size: 5.8pt;
+    font-weight: 500;
+  }
+
+  .print-day.is-holiday,
+  .print-day.is-outside-month {
+    background: #d9d9d9;
+  }
+
+  .print-rest-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 13mm;
+    font-size: 12pt;
+    font-weight: 700;
+  }
+
+  .print-check-frame {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    width: 18mm;
+    height: 10mm;
+    margin: 0 auto;
+    border: 1.5px solid #000;
+    background: #fff;
+  }
+
+  .print-check-frame span + span {
+    border-left: 1px solid #000;
+  }
+
+  .print-empty-row {
+    height: 40mm;
+    text-align: center;
   }
 
   .print-note {
-    margin-top: 7px;
+    margin-top: 5px;
     color: #333;
-    font-size: 8pt;
+    font-size: 7.5pt;
   }
 }

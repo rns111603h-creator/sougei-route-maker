@@ -61,6 +61,7 @@ assert.strictEqual(
   JSON.stringify(["場所：那覇空港", "住所：沖縄県那覇市鏡水150"]),
   "route result details should show place before address"
 );
+assert.strictEqual(utils.getPrintPlaceName(stopWithPlaceAndAddress), "那覇空港", "print sheet should show only the place name");
 const combinedCandidate = utils.buildGeocodeCandidates("那覇空港 沖縄県那覇市鏡水150")[0];
 assert.strictEqual(combinedCandidate.parts.state, "沖縄県", "combined place and address searches should keep address context");
 assert.strictEqual(combinedCandidate.parts.city, "那覇市", "combined place and address searches should keep city context");
@@ -72,10 +73,26 @@ const stopWithoutPlace = {
 };
 assert.strictEqual(JSON.stringify(utils.buildStopSearchQueries(stopWithoutPlace)), JSON.stringify(["沖縄県那覇市泉崎1丁目1-1"]));
 assert.strictEqual(utils.getStopDisplayName(stopWithoutPlace), "利用者B");
+assert.strictEqual(utils.getPrintPlaceName(stopWithoutPlace), "", "address-only stops should leave the print place blank");
 
 assert.strictEqual(JSON.stringify(utils.parseRestDays("1, 3 5,31,32,0,abc,3")), JSON.stringify([1, 3, 5, 31]), "rest days should be normalized to unique valid day numbers");
 assert.strictEqual(utils.isStopRestOnDay({ restDays: [1, 3, 5] }, 3), true, "checked rest day should be detected");
 assert.strictEqual(utils.isStopRestOnDay({ restDays: [1, 3, 5] }, 4), false, "unchecked rest day should not be treated as rest");
+
+const firstWeek = utils.getCoursePrintWeek({ targetMonth: "2026-04", targetDate: "2026-04-03" });
+assert.strictEqual(
+  JSON.stringify(firstWeek.map((day) => ({ weekday: day.weekday, day: day.day }))),
+  JSON.stringify([
+    { weekday: "月", day: null },
+    { weekday: "火", day: null },
+    { weekday: "水", day: 1 },
+    { weekday: "木", day: 2 },
+    { weekday: "金", day: 3 }
+  ]),
+  "print week should show only the selected month days within the Monday-Friday block"
+);
+assert.strictEqual(utils.getJapaneseHolidayName(new Date(2026, 4, 5)), "こどもの日", "Japanese holidays should be marked for print");
+assert.strictEqual(utils.getJapaneseHolidayName(new Date(2026, 4, 6)), "振替休日", "substitute holidays should be marked for print");
 
 const unsortedStops = [
   { id: "a", name: "A" },
