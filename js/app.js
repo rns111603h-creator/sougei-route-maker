@@ -1895,7 +1895,7 @@
         year: date.getFullYear(),
         month: date.getMonth() + 1,
         day: date.getDate(),
-        dateLabel: `${date.getMonth() + 1}/${date.getDate()}`,
+        dateLabel: String(date.getDate()),
         weekday: ["日", "月", "火", "水", "木", "金", "土"][date.getDay()],
         isOutsideMonth: !inTargetMonth,
         isHoliday: Boolean(holidayName),

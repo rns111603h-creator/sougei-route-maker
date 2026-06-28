@@ -88,13 +88,13 @@ assert.strictEqual(
     isOutsideMonth: day.isOutsideMonth
   }))),
   JSON.stringify([
-    { dateLabel: "3/30", weekday: "月", day: 30, isOutsideMonth: true },
-    { dateLabel: "3/31", weekday: "火", day: 31, isOutsideMonth: true },
-    { dateLabel: "4/1", weekday: "水", day: 1, isOutsideMonth: false },
-    { dateLabel: "4/2", weekday: "木", day: 2, isOutsideMonth: false },
-    { dateLabel: "4/3", weekday: "金", day: 3, isOutsideMonth: false }
+    { dateLabel: "30", weekday: "月", day: 30, isOutsideMonth: true },
+    { dateLabel: "31", weekday: "火", day: 31, isOutsideMonth: true },
+    { dateLabel: "1", weekday: "水", day: 1, isOutsideMonth: false },
+    { dateLabel: "2", weekday: "木", day: 2, isOutsideMonth: false },
+    { dateLabel: "3", weekday: "金", day: 3, isOutsideMonth: false }
   ]),
-  "print week should show dates for the Monday-Friday block, excluding weekends"
+  "print week should show day numbers for the Monday-Friday block, excluding weekends"
 );
 assert.strictEqual(utils.getJapaneseHolidayName(new Date(2026, 4, 5)), "こどもの日", "Japanese holidays should be marked for print");
 assert.strictEqual(utils.getJapaneseHolidayName(new Date(2026, 4, 6)), "振替休日", "substitute holidays should be marked for print");
