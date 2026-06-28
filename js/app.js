@@ -44,6 +44,8 @@
       id: `course-${number}`,
       name: `コース${number}`,
       contact: "",
+      targetMonth: "",
+      targetDate: "",
       stops: [],
       nextId: 1,
       lastRoute: null
@@ -54,12 +56,15 @@
     return course;
   }
 
-  function createStop(course, name = "", place = "", address = "") {
+  function createStop(course, name = "", place = "", address = "", service = "", scheduledTime = "", restDays = []) {
     const stop = {
       id: `${course.id}-stop-${course.nextId}`,
       name,
+      service,
       place,
       address,
+      scheduledTime,
+      restDays: normalizeRestDays(restDays),
       lat: null,
       lng: null
     };
@@ -92,6 +97,47 @@
     return queries;
   }
 
+  function normalizeRestDays(value) {
+    if (Array.isArray(value)) {
+      return [...new Set(value
+        .map((day) => Number.parseInt(day, 10))
+        .filter((day) => Number.isInteger(day) && day >= 1 && day <= 31))]
+        .sort((a, b) => a - b);
+    }
+    return parseRestDays(value);
+  }
+
+  function parseRestDays(value) {
+    return [...new Set(String(value || "")
+      .split(/[,\s、，]+/)
+      .map((day) => Number.parseInt(day, 10))
+      .filter((day) => Number.isInteger(day) && day >= 1 && day <= 31))]
+      .sort((a, b) => a - b);
+  }
+
+  function isStopRestOnDay(stop, day) {
+    const targetDay = Number.parseInt(day, 10);
+    return Number.isInteger(targetDay) && normalizeRestDays(stop.restDays).includes(targetDay);
+  }
+
+  function getTargetDay(course) {
+    const date = String(course.targetDate || "").trim();
+    if (date) {
+      const day = Number.parseInt(date.slice(-2), 10);
+      return Number.isInteger(day) ? day : null;
+    }
+    return null;
+  }
+
+  function sortStopsByRouteOrder(stops, orderedStops) {
+    const orderedIds = new Set(orderedStops.map((stop) => stop.id));
+    const byId = new Map(stops.map((stop) => [stop.id, stop]));
+    return [
+      ...orderedStops.map((stop) => byId.get(stop.id)).filter(Boolean),
+      ...stops.filter((stop) => !orderedIds.has(stop.id))
+    ];
+  }
+
   function serializeCoursesForStorage(courses) {
     return {
       version: 1,
@@ -99,10 +145,15 @@
       courses: courses.slice(0, MAX_COURSES).map((course, index) => ({
         name: String(course.name || `コース${index + 1}`).trim() || `コース${index + 1}`,
         contact: String(course.contact || "").trim(),
+        targetMonth: String(course.targetMonth || "").trim(),
+        targetDate: String(course.targetDate || "").trim(),
         stops: course.stops.map((stop) => ({
           name: String(stop.name || "").trim(),
+          service: String(stop.service || "").trim(),
           place: String(stop.place || "").trim(),
-          address: String(stop.address || "").trim()
+          address: String(stop.address || "").trim(),
+          scheduledTime: String(stop.scheduledTime || "").trim(),
+          restDays: normalizeRestDays(stop.restDays)
         }))
       }))
     };
@@ -118,6 +169,8 @@
       const course = courses[index];
       course.name = String(storedCourse.name || `コース${index + 1}`).trim() || `コース${index + 1}`;
       course.contact = String(storedCourse.contact || "").trim();
+      course.targetMonth = String(storedCourse.targetMonth || "").trim();
+      course.targetDate = String(storedCourse.targetDate || "").trim();
       if (Array.isArray(storedCourse.stops)) {
         course.stops = [];
         course.nextId = 1;
@@ -126,7 +179,10 @@
             course,
             String(storedStop.name || "").trim(),
             String(storedStop.place || "").trim(),
-            String(storedStop.address || "").trim()
+            String(storedStop.address || "").trim(),
+            String(storedStop.service || "").trim(),
+            String(storedStop.scheduledTime || "").trim(),
+            normalizeRestDays(storedStop.restDays)
           ));
         });
         if (course.stops.length === 0) {
@@ -138,7 +194,6 @@
 
     return courses;
   }
-
   function distanceKm(a, b) {
     const radiusKm = 6371;
     const toRad = (degree) => degree * Math.PI / 180;
@@ -617,6 +672,8 @@
     elements.courseTabs = document.getElementById("course-tabs");
     elements.courseName = document.getElementById("course-name");
     elements.courseContact = document.getElementById("course-contact");
+    elements.courseMonth = document.getElementById("course-month");
+    elements.courseTargetDate = document.getElementById("course-target-date");
     elements.saveCourses = document.getElementById("save-courses");
     elements.clearSavedCourses = document.getElementById("clear-saved-courses");
     elements.courseSaveStatus = document.getElementById("course-save-status");
@@ -649,10 +706,7 @@
     elements.failedAddresses = document.getElementById("failed-addresses");
     elements.googleMapLink = document.getElementById("google-map-link");
     elements.printRoute = document.getElementById("print-route");
-    elements.printTitle = document.getElementById("print-title");
-    elements.printContact = document.getElementById("print-contact");
-    elements.printBody = document.getElementById("print-body");
-    elements.printNote = document.getElementById("print-note");
+    elements.printSheet = document.getElementById("print-sheet");
   }
 
   function hasRequiredElements() {
@@ -665,6 +719,8 @@
     elements.printRoute.addEventListener("click", () => window.print());
     elements.courseName.addEventListener("input", updateActiveCourseName);
     elements.courseContact.addEventListener("input", updateActiveCourseContact);
+    elements.courseMonth.addEventListener("input", updateActiveCourseMonth);
+    elements.courseTargetDate.addEventListener("input", updateActiveCourseTargetDate);
     elements.saveCourses.addEventListener("click", saveCoursesToBrowser);
     elements.clearSavedCourses.addEventListener("click", clearSavedCourses);
     elements.modePickup.addEventListener("click", () => setMode("pickup"));
@@ -695,6 +751,8 @@
     const course = getActiveCourse();
     elements.courseName.value = course.name;
     elements.courseContact.value = course.contact;
+    elements.courseMonth.value = course.targetMonth || "";
+    elements.courseTargetDate.value = course.targetDate || "";
   }
 
   function updateActiveCourseName(event) {
@@ -706,6 +764,17 @@
 
   function updateActiveCourseContact(event) {
     getActiveCourse().contact = event.target.value.trim();
+    refreshCourseResultLabels();
+  }
+
+  function updateActiveCourseMonth(event) {
+    getActiveCourse().targetMonth = event.target.value.trim();
+    renderStops();
+    refreshCourseResultLabels();
+  }
+
+  function updateActiveCourseTargetDate(event) {
+    getActiveCourse().targetDate = event.target.value.trim();
     refreshCourseResultLabels();
   }
 
@@ -861,9 +930,9 @@
     updateLocationStatus("保存した事業所位置を削除しました。");
   }
 
-  function addStop(name = "", place = "", address = "") {
+  function addStop(name = "", place = "", address = "", service = "", scheduledTime = "", restDays = []) {
     const course = getActiveCourse();
-    course.stops.push(createStop(course, name, place, address));
+    course.stops.push(createStop(course, name, place, address, service, scheduledTime, restDays));
     renderStops();
   }
 
@@ -879,21 +948,33 @@
 
   function renderStops() {
     elements.stops.innerHTML = "";
-    getActiveCourse().stops.forEach((stop, index) => {
+    const course = getActiveCourse();
+    course.stops.forEach((stop, index) => {
       const row = document.createElement("div");
       row.className = "stop-row";
       row.dataset.id = String(stop.id);
       row.innerHTML = `
         <div class="stop-number">${index + 1}</div>
         <input class="stop-name" type="text" value="${escapeHtml(stop.name)}" placeholder="お名前" aria-label="${index + 1}番目の名前">
+        <input class="stop-service" type="text" value="${escapeHtml(stop.service)}" placeholder="サービス" aria-label="${index + 1}番目のサービス種別">
         <input class="stop-place" type="text" value="${escapeHtml(stop.place)}" placeholder="場所名・施設名" aria-label="${index + 1}番目の場所名または施設名">
         <input class="stop-address" type="text" value="${escapeHtml(stop.address)}" placeholder="住所（市町村から）" aria-label="${index + 1}番目の住所">
+        <input class="stop-time" type="time" value="${escapeHtml(stop.scheduledTime)}" aria-label="${index + 1}番目の予定時刻">
         <button class="delete-stop" type="button" aria-label="${index + 1}番目の立ち寄り先を削除">×</button>
+        <details class="rest-days">
+          <summary>${escapeHtml(buildRestSummary(stop))}</summary>
+          <div class="rest-day-grid" role="group" aria-label="${index + 1}番目の休み日">
+            ${buildRestDayCheckboxes(stop, index)}
+          </div>
+        </details>
         <div class="stop-error" hidden>場所名・住所が見つかりません。施設名を変えるか、市町村名を含む住所を入力してください。</div>
       `;
 
       row.querySelector(".stop-name").addEventListener("input", (event) => {
         stop.name = event.target.value;
+      });
+      row.querySelector(".stop-service").addEventListener("input", (event) => {
+        stop.service = event.target.value;
       });
       row.querySelector(".stop-place").addEventListener("input", (event) => {
         stop.place = event.target.value;
@@ -903,23 +984,64 @@
         stop.address = event.target.value;
         clearRowError(row);
       });
+      row.querySelector(".stop-time").addEventListener("input", (event) => {
+        stop.scheduledTime = event.target.value;
+      });
+      row.querySelectorAll(".rest-day-checkbox").forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+          stop.restDays = Array.from(row.querySelectorAll(".rest-day-checkbox:checked"))
+            .map((input) => Number.parseInt(input.value, 10));
+          const summary = row.querySelector(".rest-days summary");
+          if (summary) {
+            summary.textContent = buildRestSummary(stop);
+          }
+        });
+      });
       row.querySelector(".delete-stop").addEventListener("click", () => removeStop(stop.id));
       elements.stops.appendChild(row);
     });
+  }
+
+  function buildRestSummary(stop) {
+    const days = normalizeRestDays(stop.restDays);
+    if (days.length === 0) {
+      return "休み日を選択";
+    }
+    return `休み：${days.join("、")}日`;
+  }
+
+  function buildRestDayCheckboxes(stop, stopIndex) {
+    const days = normalizeRestDays(stop.restDays);
+    return Array.from({ length: 31 }, (_, index) => {
+      const day = index + 1;
+      const id = `${escapeHtml(stop.id)}-rest-${day}`;
+      const checked = days.includes(day) ? " checked" : "";
+      return `
+        <label class="rest-day-pill" for="${id}">
+          <input id="${id}" class="rest-day-checkbox" type="checkbox" value="${day}"${checked} aria-label="${stopIndex + 1}番目の利用者 ${day}日を休みにする">
+          <span>${day}</span>
+        </label>
+      `;
+    }).join("");
   }
 
   async function calculateRoute() {
     const facilityAddress = elements.facilityAddress.value.trim();
     const useSavedFacility = !facilityAddress && state.useSavedFacilityLocation && state.savedFacilityLocation;
     const facilityLabel = useSavedFacility ? "保存した事業所位置" : facilityAddress;
-    const activeStops = getActiveCourse().stops
+    const course = getActiveCourse();
+    const targetDay = getTargetDay(course);
+    const activeStops = course.stops
       .map((stop) => ({
         ...stop,
         name: stop.name.trim(),
+        service: String(stop.service || "").trim(),
         place: stop.place.trim(),
-        address: stop.address.trim()
+        address: stop.address.trim(),
+        scheduledTime: String(stop.scheduledTime || "").trim(),
+        restDays: normalizeRestDays(stop.restDays)
       }))
-      .filter((stop) => buildStopSearchQueries(stop).length > 0);
+      .filter((stop) => buildStopSearchQueries(stop).length > 0 && !(targetDay && isStopRestOnDay(stop, targetDay)));
 
     hideFormMessage();
     clearAddressErrors();
@@ -931,7 +1053,9 @@
     }
 
     if (activeStops.length === 0) {
-      showFormMessage("立ち寄り先の場所名または住所を1件以上入力してください。");
+      showFormMessage(targetDay
+        ? "ルート計算日に送迎対象となる利用者の場所名または住所を1件以上入力してください。休み日にチェックが入っている利用者は計算から外れます。"
+        : "立ち寄り先の場所名または住所を1件以上入力してください。");
       return;
     }
 
@@ -1092,6 +1216,9 @@
     const schedule = roadRoute ? buildArrivalSchedule(departureTime, roadRoute.legs, stopMinutes) : [];
     const course = getActiveCourse();
     course.lastRoute = { facility, facilityAddress, ordered, returnToStart, failedStops, roadRoute, schedule, optimizationMode };
+    course.stops = sortStopsByRouteOrder(course.stops, ordered);
+    renderStops();
+    (failedStops || []).forEach((stop) => markAddressError(stop.id));
     renderRouteResult(course.lastRoute);
     elements.result.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -1321,30 +1448,103 @@
   }
 
   function renderPrintSheet(facilityAddress, ordered, returnToStart, schedule) {
-    elements.printTitle.textContent = `送迎ルート表（${state.mode === "pickup" ? "お迎え" : "お送り"}・${getActiveCourse().name}）`;
-    elements.printContact.textContent = getActiveCourse().contact || "";
-    elements.printBody.innerHTML = "";
-    elements.printBody.appendChild(createPrintRow("-", "発", "事業所（出発）", facilityAddress, elements.departureTime.value || ""));
-    ordered.forEach((stop, index) => {
-      elements.printBody.appendChild(createPrintRow("□", String(index + 1), getStopDisplayName(stop), getStopAddressLabel(stop), schedule[index] ? schedule[index].arrivalTime : ""));
-    });
-    if (returnToStart) {
-      const returnSchedule = schedule[ordered.length];
-      elements.printBody.appendChild(createPrintRow("-", "着", "事業所（帰着）", facilityAddress, returnSchedule ? returnSchedule.arrivalTime : ""));
-    }
-    elements.printNote.textContent = "順番と時刻は道路ルートをもとにした目安です。道路状況や安全確認を優先して運転してください。";
+    const activeCourse = getActiveCourse();
+    const printableCourses = state.courses
+      .map((course) => ({
+        course,
+        route: course === activeCourse
+          ? { facilityAddress, ordered, returnToStart, schedule }
+          : course.lastRoute
+      }))
+      .filter(({ course }) => courseHasPrintableStops(course));
+
+    const coursesToPrint = printableCourses.length > 0
+      ? printableCourses
+      : [{ course: activeCourse, route: { facilityAddress, ordered, returnToStart, schedule } }];
+
+    elements.printSheet.innerHTML = coursesToPrint
+      .map(({ course, route }) => buildPrintCoursePage(course, route))
+      .join("");
   }
 
-  function createPrintRow(check, order, name, address, time) {
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td class="print-check">${escapeHtml(check)}</td>
-      <td class="print-order">${escapeHtml(order)}</td>
-      <td>${escapeHtml(name)}</td>
-      <td>${escapeHtml(address)}</td>
-      <td>${escapeHtml(time)}</td>
+  function courseHasPrintableStops(course) {
+    return course.stops.some((stop) => String(stop.name || stop.place || stop.address || stop.service || "").trim());
+  }
+
+  function buildPrintCoursePage(course, route) {
+    const printDays = getCoursePrintDays(course);
+    const routeStops = Array.isArray(route && route.ordered) && route.ordered.length > 0
+      ? route.ordered
+      : course.stops.filter((stop) => String(stop.name || stop.place || stop.address || stop.service || "").trim());
+    const routeSchedule = Array.isArray(route && route.schedule) ? route.schedule : [];
+    const rows = routeStops.map((stop, index) => buildAttendancePrintRow(stop, index, printDays, routeSchedule[index])).join("");
+    const startTime = elements.departureTime.value || "";
+    const facility = route && route.facilityAddress ? route.facilityAddress : elements.facilityAddress.value.trim();
+    const returnLabel = route && route.returnToStart ? "周回" : "片道";
+    return `
+      <article class="print-course-page">
+        <h2>${escapeHtml(course.name)} ${escapeHtml(formatPrintMonthLabel(course))} ${state.mode === "pickup" ? "お迎え" : "お送り"}送迎表</h2>
+        <div class="print-meta">
+          <div>事業所：<span>${escapeHtml(facility || " ")}</span></div>
+          <div>連絡先：<span>${escapeHtml(course.contact || " ")}</span></div>
+          <div>日付：<span> </span></div>
+          <div>運転者：<span> </span></div>
+          <div>車両：<span> </span></div>
+          <div>出発：<span>${escapeHtml(startTime || " ")}</span></div>
+          <div>区分：<span>${escapeHtml(returnLabel)}</span></div>
+        </div>
+        <div class="print-table-wrap">
+          <table class="attendance-print-table">
+            <thead>
+              <tr>
+                <th class="print-order">順</th>
+                <th class="print-name">利用者</th>
+                <th class="print-service">サービス</th>
+                <th class="print-place">場所・予定時刻</th>
+                ${printDays.map((day) => `<th class="print-day">${day}</th>`).join("")}
+              </tr>
+            </thead>
+            <tbody>${rows || `<tr><td colspan="${printDays.length + 4}">利用者情報がありません。</td></tr>`}</tbody>
+          </table>
+        </div>
+        <p class="print-note">□は送迎予定、休は休み予定です。順番と時刻は道路ルートをもとにした目安です。道路状況や安全確認を優先してください。</p>
+      </article>
     `;
-    return row;
+  }
+
+  function buildAttendancePrintRow(stop, index, printDays, scheduleItem) {
+    const plannedTime = scheduleItem && scheduleItem.arrivalTime ? scheduleItem.arrivalTime : stop.scheduledTime || "";
+    const placeParts = [getStopDisplayName(stop), getStopAddressLabel(stop)].filter(Boolean);
+    return `
+      <tr>
+        <td class="print-order">${index + 1}</td>
+        <td class="print-name">${escapeHtml(stop.name || getStopDisplayName(stop))}</td>
+        <td class="print-service">${escapeHtml(stop.service || "")}</td>
+        <td class="print-place">${escapeHtml(placeParts.join(" / "))}${plannedTime ? `<br><strong>${escapeHtml(plannedTime)}</strong>` : ""}</td>
+        ${printDays.map((day) => `<td class="print-day">${isStopRestOnDay(stop, day) ? "休" : "□"}</td>`).join("")}
+      </tr>
+    `;
+  }
+
+  function getCoursePrintDays(course) {
+    const [year, month] = getCoursePrintYearMonth(course);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    return Array.from({ length: daysInMonth }, (_, index) => index + 1);
+  }
+
+  function getCoursePrintYearMonth(course) {
+    const source = String(course.targetMonth || course.targetDate || "").trim();
+    const match = source.match(/^(\d{4})-(\d{2})/);
+    if (match) {
+      return [Number.parseInt(match[1], 10), Number.parseInt(match[2], 10)];
+    }
+    const now = new Date();
+    return [now.getFullYear(), now.getMonth() + 1];
+  }
+
+  function formatPrintMonthLabel(course) {
+    const [year, month] = getCoursePrintYearMonth(course);
+    return `${year}年${month}月`;
   }
 
   window.RouteMakerUtils = {
@@ -1361,6 +1561,9 @@
     createInitialCourses,
     buildStopSearchQueries,
     getStopDisplayName,
+    parseRestDays,
+    isStopRestOnDay,
+    sortStopsByRouteOrder,
     serializeCoursesForStorage,
     hydrateCoursesFromStorage,
     normalizeAddress,

@@ -66,6 +66,14 @@
           <label class="field-label" for="course-contact">コース連絡先</label>
           <input id="course-contact" type="text" maxlength="60" inputmode="tel" placeholder="例：090-0000-0000 / 担当者名">
         </div>
+        <div class="course-month-box">
+          <label class="field-label" for="course-month">送迎表の対象月</label>
+          <input id="course-month" type="month">
+        </div>
+        <div class="course-date-box">
+          <label class="field-label" for="course-target-date">ルート計算日</label>
+          <input id="course-target-date" type="date">
+        </div>
         <div class="course-save-actions">
           <button type="button" id="save-courses" class="small-button">コース設定を保存</button>
           <button type="button" id="clear-saved-courses" class="small-button ghost-button">保存内容を削除</button>
@@ -112,11 +120,11 @@
         <div class="panel">
           <div class="section-kicker"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-people"></use></svg><span id="stops-kicker">お迎えする利用者</span></div>
           <div class="section-heading">
-            <h2>立ち寄り先</h2>
-            <p>場所名で検索し、見つからない時は住所を使います。</p>
+            <h2>送迎利用者リスト</h2>
+            <p>利用者情報、場所・住所、休み日をここでまとめて管理します。</p>
           </div>
           <div id="stops" class="stops-list" aria-live="polite"></div>
-          <button type="button" id="add-stop" class="secondary-button"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-plus"></use></svg>立ち寄り先を追加</button>
+          <button type="button" id="add-stop" class="secondary-button"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-plus"></use></svg>利用者を追加</button>
 
           <button type="button" id="calculate-route" class="primary-button">
             <svg class="icon" width="22" height="22" aria-hidden="true"><use href="#icon-route"></use></svg>
@@ -177,31 +185,10 @@
 
     <footer class="app-footer">
       <strong>保存はこの端末のブラウザ内だけです。</strong>
-      「コース設定を保存」を押した場合、コース名・連絡先・利用者名・場所名・住所がこの端末に保存されます。場所名・施設名・住所は緯度経度へ変換する時だけOpenStreetMap Nominatimへ送信されます。道路時間の計算では座標をOSRMへ送信します。現在地保存を使う場合、事業所の座標もこの端末のブラウザ内だけに保存されます。
+      「コース設定を保存」を押した場合、コース名・連絡先・対象月・ルート計算日・利用者名・サービス・場所名・住所・予定時刻・休み日がこの端末に保存されます。場所名・施設名・住所は緯度経度へ変換する時だけOpenStreetMap Nominatimへ送信されます。道路時間の計算では座標をOSRMへ送信します。現在地保存を使う場合、事業所の座標もこの端末のブラウザ内だけに保存されます。
     </footer>
 
-    <section id="print-sheet" aria-label="印刷用ルート表">
-      <h2 id="print-title">送迎ルート表</h2>
-      <div class="print-meta">
-        <div>日付：<span></span></div>
-        <div>運転者：<span></span></div>
-        <div>車両：<span></span></div>
-        <div>連絡先：<span id="print-contact"></span></div>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th class="print-check">済</th>
-            <th class="print-order">順</th>
-            <th>立ち寄り先</th>
-            <th>住所</th>
-            <th>予定時刻</th>
-          </tr>
-        </thead>
-        <tbody id="print-body"></tbody>
-      </table>
-      <p id="print-note"></p>
-    </section>
+    <section id="print-sheet" aria-label="印刷用送迎表"></section>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>

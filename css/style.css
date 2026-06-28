@@ -184,7 +184,7 @@ h1 {
 
 .course-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
   gap: 12px;
   align-items: end;
   margin-bottom: 16px;
@@ -233,7 +233,9 @@ h1 {
 }
 
 .course-name-box .field-label,
-.course-contact-box .field-label {
+.course-contact-box .field-label,
+.course-month-box .field-label,
+.course-date-box .field-label {
   margin-bottom: 5px;
 }
 
@@ -317,6 +319,8 @@ h2 {
 
 input[type="text"],
 input[type="time"],
+input[type="date"],
+input[type="month"],
 input[type="number"] {
   width: 100%;
   min-height: 45px;
@@ -333,6 +337,8 @@ input[type="text"]::placeholder {
 
 input[type="text"]:focus,
 input[type="time"]:focus,
+input[type="date"]:focus,
+input[type="month"]:focus,
 input[type="number"]:focus {
   outline: 0;
   border-color: var(--blue);
@@ -428,7 +434,7 @@ input[type="number"]:focus {
 
 .stop-row {
   display: grid;
-  grid-template-columns: 36px minmax(0, 0.82fr) minmax(0, 1fr) minmax(0, 1.25fr) 38px;
+  grid-template-columns: 36px minmax(0, 0.85fr) minmax(0, 0.66fr) minmax(0, 1fr) minmax(0, 1.18fr) 98px 38px;
   gap: 9px;
   align-items: start;
 }
@@ -446,6 +452,53 @@ input[type="number"]:focus {
 
 .stop-row.is-error input[type="text"] {
   border-color: var(--red);
+  background: var(--red-soft);
+}
+
+.rest-days {
+  grid-column: 2 / -1;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.rest-days summary {
+  color: var(--blue-dark);
+  font-size: 0.8rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.rest-day-grid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.rest-day-pill {
+  display: grid;
+  place-items: center;
+  min-height: 32px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.rest-day-pill input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rest-day-pill:has(input:checked) {
+  border-color: var(--red);
+  color: var(--red-dark);
   background: var(--red-soft);
 }
 
@@ -885,18 +938,25 @@ input[type="number"]:focus {
     grid-template-columns: 34px minmax(0, 1fr) 38px;
     grid-template-areas:
       "number name delete"
+      "number service service"
       "number place place"
       "number address address"
+      "number time time"
+      ". rest rest"
       ". error error";
   }
 
   .stop-number {
     grid-area: number;
-    height: 153px;
+    height: 254px;
   }
 
   .stop-name {
     grid-area: name;
+  }
+
+  .stop-service {
+    grid-area: service;
   }
 
   .stop-place {
@@ -905,6 +965,14 @@ input[type="number"]:focus {
 
   .stop-address {
     grid-area: address;
+  }
+
+  .stop-time {
+    grid-area: time;
+  }
+
+  .rest-days {
+    grid-area: rest;
   }
 
   .delete-stop {
@@ -926,6 +994,10 @@ input[type="number"]:focus {
   .route-meta {
     width: auto;
   }
+
+  .rest-day-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -939,6 +1011,11 @@ input[type="number"]:focus {
 }
 
 @media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
   body {
     background: #fff;
   }
@@ -950,20 +1027,28 @@ input[type="number"]:focus {
   #print-sheet {
     display: block;
     color: #000;
-    font-size: 12pt;
+    font-size: 8.5pt;
+  }
+
+  .print-course-page {
+    page-break-after: always;
+  }
+
+  .print-course-page:last-child {
+    page-break-after: auto;
   }
 
   #print-sheet h2 {
     margin: 0 0 4px;
-    font-size: 18pt;
+    font-size: 15pt;
   }
 
   .print-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 18px 30px;
-    margin: 6px 0 14px;
-    font-size: 11pt;
+    gap: 6px 18px;
+    margin: 6px 0 8px;
+    font-size: 8.5pt;
   }
 
   .print-meta span {
@@ -972,37 +1057,57 @@ input[type="number"]:focus {
     border-bottom: 1px solid #000;
   }
 
+  .print-table-wrap {
+    width: 100%;
+    overflow: visible;
+  }
+
   #print-sheet table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
   }
 
   #print-sheet th,
   #print-sheet td {
-    padding: 7px 8px;
+    padding: 3px 4px;
     border: 1px solid #333;
     text-align: left;
     vertical-align: top;
+    word-break: break-word;
   }
 
   #print-sheet th {
     background: #eee;
-    font-size: 10pt;
-  }
-
-  .print-check {
-    width: 34px;
-    text-align: center;
+    font-size: 7.5pt;
   }
 
   .print-order {
-    width: 34px;
+    width: 22px;
     text-align: center;
   }
 
-  #print-note {
-    margin-top: 12px;
+  .print-name {
+    width: 80px;
+  }
+
+  .print-service {
+    width: 46px;
+  }
+
+  .print-place {
+    width: 130px;
+  }
+
+  .print-day {
+    width: 18px;
+    text-align: center;
+    font-size: 7pt;
+  }
+
+  .print-note {
+    margin-top: 7px;
     color: #333;
-    font-size: 9pt;
+    font-size: 8pt;
   }
 }
