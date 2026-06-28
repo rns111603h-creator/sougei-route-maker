@@ -85,6 +85,23 @@
     return String(stop.address || stop.displayName || stop.place || "").trim();
   }
 
+  function getRoutePrimaryName(stop) {
+    return String(stop.name || "").trim() || getStopDisplayName(stop);
+  }
+
+  function getRouteDetailLines(stop) {
+    const details = [];
+    const place = String(stop.place || "").trim();
+    const address = getStopAddressLabel(stop);
+    if (place) {
+      details.push(`場所：${place}`);
+    }
+    if (address) {
+      details.push(`住所：${address}`);
+    }
+    return details;
+  }
+
   function buildStopSearchQueries(stop) {
     const queries = [];
     const place = String(stop.place || "").trim();
@@ -1409,14 +1426,14 @@
       const scheduleItem = schedule[index];
       elements.routeList.appendChild(createRouteItem(
         String(index + 1),
-        getStopDisplayName(stop),
-        getStopAddressLabel(stop),
+        getRoutePrimaryName(stop),
+        getRouteDetailLines(stop),
         false,
         appendApproximateMeta(buildLegMeta(leg, scheduleItem), stop),
         {
           routeIndex: index,
           routeCount: ordered.length,
-          label: getStopDisplayName(stop)
+          label: getRoutePrimaryName(stop)
         }
       ));
     });
@@ -1450,7 +1467,7 @@
     return parts.join(" ・ ");
   }
 
-  function createRouteItem(order, name, address, isFacility, meta, reorderOptions) {
+  function createRouteItem(order, name, detailLines, isFacility, meta, reorderOptions) {
     const item = document.createElement("li");
     const isReorderable = reorderOptions && Number.isInteger(reorderOptions.routeIndex);
     item.className = isReorderable ? "route-item is-reorderable" : "route-item";
@@ -1462,7 +1479,7 @@
       <span class="route-badge${isFacility ? " is-facility" : ""}">${escapeHtml(order)}</span>
       <span class="route-content">
         <span class="route-name">${escapeHtml(name)}</span>
-        <span class="route-address">${escapeHtml(address)}</span>
+        ${renderRouteDetailLines(detailLines)}
         ${meta ? `<span class="route-meta">${escapeHtml(meta)}</span>` : ""}
       </span>
       ${isReorderable ? `
@@ -1474,6 +1491,14 @@
       ` : ""}
     `;
     return item;
+  }
+
+  function renderRouteDetailLines(detailLines) {
+    const lines = Array.isArray(detailLines) ? detailLines : [detailLines];
+    return lines
+      .filter((line) => String(line || "").trim())
+      .map((line) => `<span class="route-address">${escapeHtml(line)}</span>`)
+      .join("");
   }
 
   function bindRouteReorderControls(route) {
@@ -1558,11 +1583,11 @@
     const targets = ordered.map((stop, index) => ({
       order: String(index + 1),
       stopId: stop.id,
-      name: getStopDisplayName(stop),
-      address: getStopAddressLabel(stop)
+      name: getRoutePrimaryName(stop),
+      details: getRouteDetailLines(stop)
     }));
     if (returnToStart) {
-      targets.push({ order: "着", name: "事業所", address: facilityAddress });
+      targets.push({ order: "着", name: "事業所", details: [facilityAddress] });
     }
     const rows = targets.map((target, index) => {
       const leg = roadRoute.legs[index];
@@ -1583,7 +1608,7 @@
       return `
         <tr>
           <td>${escapeHtml(target.order)}</td>
-          <td>${escapeHtml(target.name)}<br><span class="route-address">${escapeHtml(target.address)}</span></td>
+          <td>${escapeHtml(target.name)}${renderScheduleDetailLines(target.details)}</td>
           <td>${timeCell}</td>
           <td>${escapeHtml(formatDuration(leg.durationSeconds))}</td>
           <td>${escapeHtml(formatDistanceMeters(leg.distanceMeters))}</td>
@@ -1604,6 +1629,13 @@
       <p class="mini-status">${escapeHtml(departureNote)} 必要な地点の予定時刻を手入力すると、それ以降の予定時刻も自動で調整します。</p>
     `;
     bindScheduleControls(route);
+  }
+
+  function renderScheduleDetailLines(details) {
+    return (Array.isArray(details) ? details : [details])
+      .filter((line) => String(line || "").trim())
+      .map((line) => `<br><span class="route-address">${escapeHtml(line)}</span>`)
+      .join("");
   }
 
   function bindScheduleControls(route) {
@@ -1838,6 +1870,8 @@
     createInitialCourses,
     buildStopSearchQueries,
     getStopDisplayName,
+    getRoutePrimaryName,
+    getRouteDetailLines,
     parseRestDays,
     isStopRestOnDay,
     sortStopsByRouteOrder,

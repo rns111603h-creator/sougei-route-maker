@@ -184,9 +184,9 @@ h1 {
 
 .course-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
-  gap: 12px;
-  align-items: end;
+  grid-template-columns: minmax(260px, 0.82fr) minmax(420px, 1.18fr);
+  gap: 16px;
+  align-items: start;
   margin-bottom: 16px;
   padding: 12px;
   border: 1px solid var(--line);
@@ -273,6 +273,7 @@ h1 {
 
 .course-settings {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 9px;
   min-width: 0;
 }
@@ -288,6 +289,11 @@ h1 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.course-save-actions,
+#course-save-status {
+  grid-column: 1 / -1;
 }
 
 .workbench {
@@ -1169,6 +1175,7 @@ input[type="number"]:focus {
   .summary-grid,
   .result-actions,
   .location-tools,
+  .course-settings,
   .time-grid,
   .course-tabs {
     grid-template-columns: 1fr;

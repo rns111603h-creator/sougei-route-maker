@@ -55,6 +55,12 @@ assert.strictEqual(
   "那覇空港",
   "print and route labels should prefer place name"
 );
+assert.strictEqual(utils.getRoutePrimaryName(stopWithPlaceAndAddress), "利用者A", "route result should use user name as primary text");
+assert.strictEqual(
+  JSON.stringify(utils.getRouteDetailLines(stopWithPlaceAndAddress)),
+  JSON.stringify(["場所：那覇空港", "住所：沖縄県那覇市鏡水150"]),
+  "route result details should show place before address"
+);
 const combinedCandidate = utils.buildGeocodeCandidates("那覇空港 沖縄県那覇市鏡水150")[0];
 assert.strictEqual(combinedCandidate.parts.state, "沖縄県", "combined place and address searches should keep address context");
 assert.strictEqual(combinedCandidate.parts.city, "那覇市", "combined place and address searches should keep city context");
