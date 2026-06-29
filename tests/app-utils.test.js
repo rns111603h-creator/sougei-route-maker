@@ -149,6 +149,38 @@ assert.strictEqual(
   "invalid route move indexes should leave the list unchanged"
 );
 
+const printCourse = {
+  stops: [
+    { id: "a", name: "利用者A", place: "施設A", address: "", restDates: [] },
+    { id: "b", name: "利用者B", place: "施設B", address: "", restDates: [] },
+    { id: "c", name: "利用者C", place: "施設C", address: "", restDates: ["2026-06-30"] }
+  ]
+};
+const printRoute = {
+  ordered: [
+    { id: "b", name: "利用者B", place: "施設B", address: "" },
+    { id: "a", name: "利用者A", place: "施設A", address: "" }
+  ],
+  schedule: [
+    { arrivalTime: "09:10" },
+    { arrivalTime: "09:20" }
+  ]
+};
+assert.strictEqual(
+  JSON.stringify(utils.buildPrintableRouteStops(printCourse, printRoute).map((stop) => stop.id)),
+  JSON.stringify(["b", "a", "c"]),
+  "print sheet should keep route order and append rest or uncalculated users so they can be shown as rest"
+);
+assert.strictEqual(
+  utils.buildScheduleByStopId(printRoute).get("a").arrivalTime,
+  "09:20",
+  "print schedules should stay attached to the matching route stop after rest users are appended"
+);
+assert.ok(
+  utils.getPrintUsageCellContent(printCourse.stops[2], { day: 30, dateKey: "2026-06-30" }, true).includes("print-rest-mark"),
+  "print cells should show a rest mark for users with a rest setting on that date"
+);
+
 const routeLegs = [
   { durationSeconds: 600, distanceMeters: 1000 },
   { durationSeconds: 900, distanceMeters: 2000 },

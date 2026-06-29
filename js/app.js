@@ -1849,13 +1849,53 @@
     return course.stops.some((stop) => String(stop.name || stop.place || stop.address || "").trim());
   }
 
+  function hasPrintableStopInfo(stop) {
+    return Boolean(String(stop && (stop.name || stop.place || stop.address) || "").trim());
+  }
+
+  function buildPrintableRouteStops(course, route) {
+    const courseStops = Array.isArray(course && course.stops)
+      ? course.stops.filter(hasPrintableStopInfo)
+      : [];
+    const courseStopsById = new Map(courseStops.map((stop) => [stop.id, stop]));
+    const orderedStops = Array.isArray(route && route.ordered) ? route.ordered : [];
+    const orderedIds = new Set();
+    const printableStops = [];
+
+    orderedStops.forEach((routeStop) => {
+      const stop = courseStopsById.get(routeStop.id) || routeStop;
+      if (hasPrintableStopInfo(stop)) {
+        printableStops.push(stop);
+        orderedIds.add(stop.id);
+      }
+    });
+
+    courseStops.forEach((stop) => {
+      if (!orderedIds.has(stop.id)) {
+        printableStops.push(stop);
+      }
+    });
+
+    return printableStops;
+  }
+
+  function buildScheduleByStopId(route) {
+    const scheduleByStopId = new Map();
+    const orderedStops = Array.isArray(route && route.ordered) ? route.ordered : [];
+    const routeSchedule = Array.isArray(route && route.schedule) ? route.schedule : [];
+    orderedStops.forEach((stop, index) => {
+      if (stop && stop.id && routeSchedule[index]) {
+        scheduleByStopId.set(stop.id, routeSchedule[index]);
+      }
+    });
+    return scheduleByStopId;
+  }
+
   function buildPrintCoursePage(course, route) {
     const printDays = getCoursePrintWeek(course);
-    const routeStops = Array.isArray(route && route.ordered) && route.ordered.length > 0
-      ? route.ordered
-      : course.stops.filter((stop) => String(stop.name || stop.place || stop.address || "").trim());
-    const routeSchedule = Array.isArray(route && route.schedule) ? route.schedule : [];
-    const rows = routeStops.map((stop, index) => buildAttendancePrintRow(stop, index, printDays, routeSchedule[index])).join("");
+    const routeStops = buildPrintableRouteStops(course, route);
+    const routeScheduleByStopId = buildScheduleByStopId(route);
+    const rows = routeStops.map((stop, index) => buildAttendancePrintRow(stop, index, printDays, routeScheduleByStopId.get(stop.id))).join("");
     const startTime = route && route.departureTime ? route.departureTime : "";
     const contact = String(course.contact || "").trim();
     return `
@@ -2158,6 +2198,9 @@
     isStopRestOnDate,
     getCoursePrintWeek,
     getCourseRestDateChoices,
+    buildPrintableRouteStops,
+    buildScheduleByStopId,
+    getPrintUsageCellContent,
     getJapaneseHolidayName,
     sortStopsByRouteOrder,
     moveItemInList,
