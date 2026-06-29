@@ -561,7 +561,7 @@ input[type="number"]:focus {
 
 .rest-day-grid {
   display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 6px;
   margin-top: 8px;
 }
@@ -1386,8 +1386,7 @@ input[type="number"]:focus {
     font-weight: 500;
   }
 
-  .print-day.is-holiday,
-  .print-day.is-outside-month {
+  .print-day.is-holiday {
     background: #d9d9d9;
   }
 
@@ -1403,7 +1402,7 @@ input[type="number"]:focus {
 
   .print-check-frame {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     width: 18mm;
     height: 10mm;
     margin: 0 auto;
@@ -1413,6 +1412,14 @@ input[type="number"]:focus {
 
   .print-check-frame span + span {
     border-left: 1px solid #000;
+  }
+
+  .print-check-frame span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7pt;
+    font-weight: 700;
   }
 
   .print-empty-row {

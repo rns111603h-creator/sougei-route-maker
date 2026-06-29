@@ -34,6 +34,7 @@ assert.notStrictEqual(courses[0].stops[0].id, courses[1].stops[0].id, "stop ids 
 assert.strictEqual(courses[0].stops[0].service, undefined, "stop service should not be part of the route input");
 assert.strictEqual(courses[0].stops[0].scheduledTime, undefined, "manual scheduled time should not be part of the route input");
 assert.strictEqual(JSON.stringify(courses[0].stops[0].restDays), JSON.stringify([]), "stop rest days should start empty");
+assert.strictEqual(JSON.stringify(courses[0].stops[0].restDates), JSON.stringify([]), "stop rest dates should start empty");
 
 courses[0].stops[0].name = "Aさん";
 courses[1].stops[0].name = "Bさん";
@@ -78,6 +79,7 @@ assert.strictEqual(utils.getPrintPlaceName(stopWithoutPlace), "", "address-only 
 assert.strictEqual(JSON.stringify(utils.parseRestDays("1, 3 5,31,32,0,abc,3")), JSON.stringify([1, 3, 5, 31]), "rest days should be normalized to unique valid day numbers");
 assert.strictEqual(utils.isStopRestOnDay({ restDays: [1, 3, 5] }, 3), true, "checked rest day should be detected");
 assert.strictEqual(utils.isStopRestOnDay({ restDays: [1, 3, 5] }, 4), false, "unchecked rest day should not be treated as rest");
+assert.strictEqual(utils.isStopRestOnDate({ restDates: ["2026-07-01"] }, "2026-07-01"), true, "date-based rest days should be detected");
 
 const firstWeek = utils.getCoursePrintWeek({ targetMonth: "2026-04", targetDate: "2026-04-03" });
 assert.strictEqual(
@@ -95,6 +97,28 @@ assert.strictEqual(
     { dateLabel: "3", weekday: "金", day: 3, isOutsideMonth: false }
   ]),
   "print week should show day numbers for the Monday-Friday block, excluding weekends"
+);
+const monthEndWeek = utils.getCoursePrintWeek({ targetMonth: "2026-06", targetDate: "2026-06-30" });
+assert.strictEqual(
+  JSON.stringify(monthEndWeek.map((day) => ({
+    dateLabel: day.dateLabel,
+    weekday: day.weekday,
+    dateKey: day.dateKey,
+    isOutsideMonth: day.isOutsideMonth
+  }))),
+  JSON.stringify([
+    { dateLabel: "29", weekday: "月", dateKey: "2026-06-29", isOutsideMonth: false },
+    { dateLabel: "30", weekday: "火", dateKey: "2026-06-30", isOutsideMonth: false },
+    { dateLabel: "1", weekday: "水", dateKey: "2026-07-01", isOutsideMonth: true },
+    { dateLabel: "2", weekday: "木", dateKey: "2026-07-02", isOutsideMonth: true },
+    { dateLabel: "3", weekday: "金", dateKey: "2026-07-03", isOutsideMonth: true }
+  ]),
+  "print week should always include five weekdays even when it crosses into the next month"
+);
+assert.ok(
+  utils.getCourseRestDateChoices({ targetMonth: "2026-06", targetDate: "2026-06-30" })
+    .some((choice) => choice.dateKey === "2026-07-03"),
+  "rest-day choices should include next-month weekdays shown on the print sheet"
 );
 assert.strictEqual(utils.getJapaneseHolidayName(new Date(2026, 4, 5)), "こどもの日", "Japanese holidays should be marked for print");
 assert.strictEqual(utils.getJapaneseHolidayName(new Date(2026, 4, 6)), "振替休日", "substitute holidays should be marked for print");
@@ -155,6 +179,7 @@ courses[0].stops[0].name = "利用者A";
 courses[0].stops[0].place = "那覇空港";
 courses[0].stops[0].address = "沖縄県那覇市鏡水150";
 courses[0].stops[0].restDays = [3, 10];
+courses[0].stops[0].restDates = ["2026-04-03", "2026-04-10", "2026-05-01"];
 courses[0].lastRoute = { shouldNotBeSaved: true };
 const savedPayload = utils.serializeCoursesForStorage(courses);
 assert.strictEqual(savedPayload.version, 1);
@@ -166,6 +191,7 @@ assert.strictEqual(savedPayload.courses[0].stops[0].service, undefined);
 assert.strictEqual(savedPayload.courses[0].stops[0].place, "那覇空港");
 assert.strictEqual(savedPayload.courses[0].stops[0].scheduledTime, undefined);
 assert.strictEqual(JSON.stringify(savedPayload.courses[0].stops[0].restDays), JSON.stringify([3, 10]));
+assert.strictEqual(JSON.stringify(savedPayload.courses[0].stops[0].restDates), JSON.stringify(["2026-04-03", "2026-04-10", "2026-05-01"]));
 assert.strictEqual(savedPayload.courses[0].lastRoute, undefined, "calculated route results should not be stored");
 
 const restoredCourses = utils.hydrateCoursesFromStorage(savedPayload);
@@ -180,6 +206,23 @@ assert.strictEqual(restoredCourses[0].stops[0].place, "那覇空港");
 assert.strictEqual(restoredCourses[0].stops[0].address, "沖縄県那覇市鏡水150");
 assert.strictEqual(restoredCourses[0].stops[0].scheduledTime, undefined);
 assert.strictEqual(JSON.stringify(restoredCourses[0].stops[0].restDays), JSON.stringify([3, 10]));
+assert.strictEqual(JSON.stringify(restoredCourses[0].stops[0].restDates), JSON.stringify(["2026-04-03", "2026-04-10", "2026-05-01"]));
 assert.strictEqual(restoredCourses[0].lastRoute, null);
+
+const legacyRestoredCourses = utils.hydrateCoursesFromStorage({
+  version: 1,
+  courses: [{
+    name: "旧コース",
+    contact: "",
+    targetMonth: "2026-04",
+    targetDate: "2026-04-03",
+    stops: [{ name: "利用者C", place: "施設C", address: "", restDays: [3, 10] }]
+  }]
+});
+assert.strictEqual(
+  JSON.stringify(legacyRestoredCourses[0].stops[0].restDates),
+  JSON.stringify(["2026-04-03", "2026-04-10"]),
+  "legacy day-based rest settings should hydrate into date-based rest settings"
+);
 
 console.log("course and place utility tests passed");

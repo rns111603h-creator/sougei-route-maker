@@ -64,6 +64,7 @@
       place,
       address,
       restDays: normalizeRestDays(restDays),
+      restDates: convertRestDaysToDates(restDays, course),
       lat: null,
       lng: null
     };
@@ -138,9 +139,50 @@
       .sort((a, b) => a - b);
   }
 
+  function normalizeRestDates(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return [...new Set(value
+      .map((date) => String(date || "").trim())
+      .filter(isValidDateKey))]
+      .sort();
+  }
+
+  function isValidDateKey(value) {
+    const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+      return false;
+    }
+    const year = Number.parseInt(match[1], 10);
+    const month = Number.parseInt(match[2], 10);
+    const day = Number.parseInt(match[3], 10);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year && date.getMonth() + 1 === month && date.getDate() === day;
+  }
+
+  function convertRestDaysToDates(restDays, course) {
+    const [year, month] = getCoursePrintYearMonth(course || {});
+    return normalizeRestDays(restDays)
+      .filter((day) => day <= new Date(year, month, 0).getDate())
+      .map((day) => formatDateKey(year, month, day));
+  }
+
+  function getStopRestDates(stop, course) {
+    const dates = normalizeRestDates(stop.restDates);
+    if (dates.length > 0) {
+      return dates;
+    }
+    return convertRestDaysToDates(stop.restDays, course);
+  }
+
   function isStopRestOnDay(stop, day) {
     const targetDay = Number.parseInt(day, 10);
     return Number.isInteger(targetDay) && normalizeRestDays(stop.restDays).includes(targetDay);
+  }
+
+  function isStopRestOnDate(stop, dateKey, course) {
+    return isValidDateKey(dateKey) && getStopRestDates(stop, course).includes(dateKey);
   }
 
   function getPrintPlaceName(stop) {
@@ -154,6 +196,11 @@
       return Number.isInteger(day) ? day : null;
     }
     return null;
+  }
+
+  function getTargetDateKey(course) {
+    const date = String(course.targetDate || "").trim();
+    return isValidDateKey(date) ? date : "";
   }
 
   function sortStopsByRouteOrder(stops, orderedStops) {
@@ -193,7 +240,14 @@
           name: String(stop.name || "").trim(),
           place: String(stop.place || "").trim(),
           address: String(stop.address || "").trim(),
-          restDays: normalizeRestDays(stop.restDays)
+          restDays: getStopRestDates(stop, course)
+            .filter((dateKey) => {
+              const date = parseDateKey(dateKey);
+              const [year, month] = getCoursePrintYearMonth(course);
+              return date.getFullYear() === year && date.getMonth() + 1 === month;
+            })
+            .map((dateKey) => parseDateKey(dateKey).getDate()),
+          restDates: getStopRestDates(stop, course)
         }))
       }))
     };
@@ -215,13 +269,19 @@
         course.stops = [];
         course.nextId = 1;
         storedCourse.stops.forEach((storedStop) => {
-          course.stops.push(createStop(
+          const stop = createStop(
             course,
             String(storedStop.name || "").trim(),
             String(storedStop.place || "").trim(),
             String(storedStop.address || "").trim(),
             normalizeRestDays(storedStop.restDays)
-          ));
+          );
+          stop.restDates = normalizeRestDates(storedStop.restDates);
+          if (stop.restDates.length === 0) {
+            stop.restDates = convertRestDaysToDates(storedStop.restDays, course);
+          }
+          stop.restDays = normalizeRestDays(storedStop.restDays);
+          course.stops.push(stop);
         });
         if (course.stops.length === 0) {
           course.stops.push(createStop(course));
@@ -850,6 +910,7 @@
 
   function updateActiveCourseTargetDate(event) {
     getActiveCourse().targetDate = event.target.value.trim();
+    renderStops();
     updateCalculationSummary();
     invalidateActiveRoute("ルート計算日を変更しました。もう一度ルートを計算してください。");
   }
@@ -1070,9 +1131,9 @@
         <input class="stop-address" type="text" value="${escapeHtml(stop.address)}" placeholder="住所（市町村から）" aria-label="${index + 1}番目の住所">
         <button class="delete-stop" type="button" aria-label="${index + 1}番目の立ち寄り先を削除">×</button>
         <details class="rest-days">
-          <summary>${escapeHtml(buildRestSummary(stop))}</summary>
+          <summary>${escapeHtml(buildRestSummary(stop, course))}</summary>
           <div class="rest-day-grid" role="group" aria-label="${index + 1}番目の休み日">
-            ${buildRestDayCheckboxes(stop, index)}
+            ${buildRestDayCheckboxes(stop, index, course)}
           </div>
         </details>
         <div class="stop-error" hidden>場所名・住所が見つかりません。施設名を変えるか、市町村名を含む住所を入力してください。</div>
@@ -1096,11 +1157,16 @@
       });
       row.querySelectorAll(".rest-day-checkbox").forEach((checkbox) => {
         checkbox.addEventListener("change", () => {
-          stop.restDays = Array.from(row.querySelectorAll(".rest-day-checkbox:checked"))
-            .map((input) => Number.parseInt(input.value, 10));
+          stop.restDates = normalizeRestDates(Array.from(row.querySelectorAll(".rest-day-checkbox:checked"))
+            .map((input) => input.value));
+          const [year, month] = getCoursePrintYearMonth(course);
+          stop.restDays = getStopRestDates(stop, course)
+            .map((dateKey) => parseDateKey(dateKey))
+            .filter((date) => date.getFullYear() === year && date.getMonth() + 1 === month)
+            .map((date) => date.getDate());
           const summary = row.querySelector(".rest-days summary");
           if (summary) {
-            summary.textContent = buildRestSummary(stop);
+            summary.textContent = buildRestSummary(stop, course);
           }
           updateCalculationSummary();
           invalidateActiveRoute("休み日を変更しました。もう一度ルートを計算してください。");
@@ -1118,8 +1184,8 @@
     }
     const facilityReady = Boolean(elements.facilityAddress.value.trim()) || Boolean(state.useSavedFacilityLocation && state.savedFacilityLocation);
     const course = getActiveCourse();
-    const targetDay = getTargetDay(course);
-    const stopCount = course.stops.filter((stop) => buildStopSearchQueries(stop).length > 0 && !(targetDay && isStopRestOnDay(stop, targetDay))).length;
+    const targetDateKey = getTargetDateKey(course);
+    const stopCount = course.stops.filter((stop) => buildStopSearchQueries(stop).length > 0 && !(targetDateKey && isStopRestOnDate(stop, targetDateKey, course))).length;
     if (facilityReady && stopCount > 0) {
       elements.calculationSummary.textContent = `事業所と送迎利用者${stopCount}件で計算します。`;
       elements.calculationSummary.classList.add("is-ready");
@@ -1135,24 +1201,23 @@
     elements.calculationSummary.classList.remove("is-ready");
   }
 
-  function buildRestSummary(stop) {
-    const days = normalizeRestDays(stop.restDays);
-    if (days.length === 0) {
+  function buildRestSummary(stop, course) {
+    const restDates = getStopRestDates(stop, course);
+    if (restDates.length === 0) {
       return "休み日を選択（任意）";
     }
-    return `休み：${days.join("、")}日`;
+    return `休み：${restDates.map((dateKey) => formatRestDateLabel(dateKey, course)).join("、")}`;
   }
 
-  function buildRestDayCheckboxes(stop, stopIndex) {
-    const days = normalizeRestDays(stop.restDays);
-    return Array.from({ length: 31 }, (_, index) => {
-      const day = index + 1;
-      const id = `${escapeHtml(stop.id)}-rest-${day}`;
-      const checked = days.includes(day) ? " checked" : "";
+  function buildRestDayCheckboxes(stop, stopIndex, course) {
+    const restDates = getStopRestDates(stop, course);
+    return getCourseRestDateChoices(course).map((choice) => {
+      const id = `${escapeHtml(stop.id)}-rest-${choice.dateKey}`;
+      const checked = restDates.includes(choice.dateKey) ? " checked" : "";
       return `
         <label class="rest-day-pill" for="${id}">
-          <input id="${id}" class="rest-day-checkbox" type="checkbox" value="${day}"${checked} aria-label="${stopIndex + 1}番目の利用者 ${day}日を休みにする">
-          <span>${day}</span>
+          <input id="${id}" class="rest-day-checkbox" type="checkbox" value="${escapeHtml(choice.dateKey)}"${checked} aria-label="${stopIndex + 1}番目の利用者 ${escapeHtml(choice.label)}を休みにする">
+          <span>${escapeHtml(choice.label)}</span>
         </label>
       `;
     }).join("");
@@ -1163,16 +1228,17 @@
     const useSavedFacility = !facilityAddress && state.useSavedFacilityLocation && state.savedFacilityLocation;
     const facilityLabel = useSavedFacility ? "保存した事業所位置" : facilityAddress;
     const course = getActiveCourse();
-    const targetDay = getTargetDay(course);
+    const targetDateKey = getTargetDateKey(course);
     const activeStops = course.stops
       .map((stop) => ({
         ...stop,
         name: stop.name.trim(),
         place: stop.place.trim(),
         address: stop.address.trim(),
-        restDays: normalizeRestDays(stop.restDays)
+        restDays: normalizeRestDays(stop.restDays),
+        restDates: getStopRestDates(stop, course)
       }))
-      .filter((stop) => buildStopSearchQueries(stop).length > 0 && !(targetDay && isStopRestOnDay(stop, targetDay)));
+      .filter((stop) => buildStopSearchQueries(stop).length > 0 && !(targetDateKey && isStopRestOnDate(stop, targetDateKey, course)));
 
     hideFormMessage();
     clearAddressErrors();
@@ -1184,7 +1250,7 @@
     }
 
     if (activeStops.length === 0) {
-      showFormMessage(targetDay
+      showFormMessage(targetDateKey
         ? "Step 3：ルート計算日に送迎対象となる利用者の場所名または住所を1件以上入力してください。休み日にチェックが入っている利用者は計算から外れます。"
         : "Step 3：利用者の場所名または住所を1件以上入力してください。");
       return;
@@ -1873,10 +1939,10 @@
     if (!day.day) {
       return "";
     }
-    if (!day.isOutsideMonth && isStopRestOnDay(stop, day.day)) {
+    if (isStopRestOnDate(stop, day.dateKey)) {
       return isFirstRow ? "<span class=\"print-rest-mark\">休</span>" : "";
     }
-    return "<span class=\"print-check-frame\"><span></span><span></span><span></span></span>";
+    return isFirstRow ? "<span class=\"print-check-frame\"><span>迎</span><span>送</span></span>" : "";
   }
 
   function getCoursePrintWeek(course) {
@@ -1895,6 +1961,7 @@
         year: date.getFullYear(),
         month: date.getMonth() + 1,
         day: date.getDate(),
+        dateKey: formatDateObjectKey(date),
         dateLabel: String(date.getDate()),
         weekday: ["日", "月", "火", "水", "木", "金", "土"][date.getDay()],
         isOutsideMonth: !inTargetMonth,
@@ -1902,6 +1969,47 @@
         holidayName
       };
     });
+  }
+
+  function getCourseRestDateChoices(course) {
+    const [year, month] = getCoursePrintYearMonth(course);
+    const firstDate = new Date(year, month - 1, 1);
+    const lastDate = new Date(year, month, 0);
+    const start = new Date(firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate());
+    const firstDayOfWeek = start.getDay();
+    start.setDate(start.getDate() - (firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1));
+
+    const end = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
+    const lastDayOfWeek = end.getDay();
+    end.setDate(end.getDate() + (lastDayOfWeek === 0 ? -2 : 5 - lastDayOfWeek));
+
+    const choices = [];
+    const date = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    while (date <= end) {
+      const weekday = date.getDay();
+      if (weekday >= 1 && weekday <= 5) {
+        const dateKey = formatDateObjectKey(date);
+        choices.push({
+          dateKey,
+          label: formatRestDateLabel(dateKey, course),
+          day: date.getDate(),
+          weekday: ["日", "月", "火", "水", "木", "金", "土"][weekday],
+          isOutsideMonth: date.getFullYear() !== year || date.getMonth() + 1 !== month
+        });
+      }
+      date.setDate(date.getDate() + 1);
+    }
+    return choices;
+  }
+
+  function formatRestDateLabel(dateKey, course) {
+    const date = parseDateKey(dateKey);
+    const [year, month] = getCoursePrintYearMonth(course || {});
+    const weekday = ["日", "月", "火", "水", "木", "金", "土"][date.getDay()];
+    const dayLabel = date.getFullYear() === year && date.getMonth() + 1 === month
+      ? `${date.getDate()}`
+      : `${date.getMonth() + 1}/${date.getDate()}`;
+    return `${dayLabel}(${weekday})`;
   }
 
   function getCoursePrintTargetDate(course, fallbackYear, fallbackMonth) {
@@ -2045,8 +2153,11 @@
     getRouteDetailLines,
     getPrintPlaceName,
     parseRestDays,
+    normalizeRestDates,
     isStopRestOnDay,
+    isStopRestOnDate,
     getCoursePrintWeek,
+    getCourseRestDateChoices,
     getJapaneseHolidayName,
     sortStopsByRouteOrder,
     moveItemInList,
