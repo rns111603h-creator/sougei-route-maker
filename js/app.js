@@ -257,6 +257,10 @@
     return next;
   }
 
+  function isPlainObject(value) {
+    return Boolean(value && typeof value === "object" && !Array.isArray(value));
+  }
+
   function serializeCoursesForStorage(courses) {
     return {
       version: 1,
@@ -283,13 +287,27 @@
     };
   }
 
+  function getStoredCourseEntries(payload) {
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+    if (isPlainObject(payload) && Array.isArray(payload.courses)) {
+      return payload.courses;
+    }
+    return null;
+  }
+
   function hydrateCoursesFromStorage(payload) {
     const courses = createInitialCourses();
-    if (!payload || payload.version !== 1 || !Array.isArray(payload.courses)) {
+    const storedCourses = getStoredCourseEntries(payload);
+    if (!storedCourses) {
       return courses;
     }
 
-    payload.courses.slice(0, MAX_COURSES).forEach((storedCourse, index) => {
+    storedCourses.slice(0, MAX_COURSES).forEach((storedCourse, index) => {
+      if (!isPlainObject(storedCourse)) {
+        return;
+      }
       const course = courses[index];
       course.name = String(storedCourse.name || `コース${index + 1}`).trim() || `コース${index + 1}`;
       course.contact = String(storedCourse.contact || "").trim();
@@ -298,7 +316,7 @@
       if (Array.isArray(storedCourse.stops)) {
         course.stops = [];
         course.nextId = 1;
-        storedCourse.stops.forEach((storedStop) => {
+        storedCourse.stops.filter(isPlainObject).forEach((storedStop) => {
           const stop = createStop(
             course,
             String(storedStop.name || "").trim(),
@@ -488,7 +506,12 @@
       if (index > 0) {
         await sleep(GEOCODE_DELAY_MS);
       }
-      const location = await searchNominatimCandidate(candidate);
+      let location = null;
+      try {
+        location = await searchNominatimCandidate(candidate);
+      } catch (error) {
+        location = null;
+      }
       if (location) {
         return location;
       }
@@ -729,6 +752,9 @@
       return null;
     }
     const route = data.routes[0];
+    if (!Array.isArray(route.legs) || route.legs.length !== points.length - 1) {
+      return null;
+    }
     return {
       distanceMeters: route.distance,
       durationSeconds: route.duration,
@@ -970,7 +996,13 @@
     try {
       const raw = window.localStorage.getItem(SAVED_COURSES_KEY);
       if (raw) {
-        state.courses = hydrateCoursesFromStorage(JSON.parse(raw));
+        const parsed = JSON.parse(raw);
+        if (!getStoredCourseEntries(parsed)) {
+          state.courses = createInitialCourses();
+          updateCourseSaveStatus("保存済みコース設定の形式が古いか壊れているため、初期状態で開きました。", "error");
+          return;
+        }
+        state.courses = hydrateCoursesFromStorage(parsed);
         updateCourseSaveStatus("保存済みのコース設定を読み込みました。");
         return;
       }
@@ -1137,9 +1169,15 @@
           lng: position.coords.longitude,
           savedAt: new Date().toISOString()
         };
+        try {
+          window.localStorage.setItem(SAVED_FACILITY_KEY, JSON.stringify(saved));
+        } catch (error) {
+          elements.saveCurrentLocation.disabled = false;
+          updateLocationStatus("現在地を保存できませんでした。ブラウザの保存領域を確認してください。", "error");
+          return;
+        }
         state.savedFacilityLocation = saved;
         state.useSavedFacilityLocation = true;
-        window.localStorage.setItem(SAVED_FACILITY_KEY, JSON.stringify(saved));
         elements.saveCurrentLocation.disabled = false;
         updateCalculationSummary();
         updateLocationStatus("現在地を事業所位置として保存しました。次回以降もこの端末で使えます。");
@@ -1496,7 +1534,7 @@
     renderDistanceNote(route.roadRoute, route.optimizationMode, [route.facility, ...route.ordered]);
 
     renderRouteList(route);
-    renderSchedule(route, elements.departureTime.value, Number.parseInt(elements.stopMinutes.value, 10) || 0);
+    renderSchedule(route, route.departureTime || elements.departureTime.value, Number.isFinite(route.stopMinutes) ? route.stopMinutes : Number.parseInt(elements.stopMinutes.value, 10) || 0);
     renderFailedAddresses(route.failedStops || []);
     renderGoogleMapLink(route.facility, route.ordered, route.returnToStart);
     renderMap(route.facility, route.ordered, route.returnToStart, route.roadRoute);
@@ -1534,20 +1572,20 @@
     const approximationNote = points.some((point) => point.isApproximate)
       ? "一部の住所は番地まで見つからなかったため、丁目などの代表地点で表示しています。Googleマップや現場判断で位置を確認してください。"
       : "";
-    const avoidNote = "高速道路を避けた道路時間をもとにした目安です。Googleマップは高速道路・有料道路を避ける設定で開きます。";
+    const avoidNote = "高速道路を避けた道路時間をもとにした目安です。";
     if (optimizationMode === "straight-line") {
       elements.distanceNote.textContent = `${approximationNote} OSRMの道路時間を取得できなかったため、直線距離を使って順番を計算しています。実際の走行時間は高速道路・有料道路を避ける設定のGoogleマップや現場判断で確認してください。`.trim();
       return;
     }
     if (roadRoute && roadRoute.isDurationMatrixEstimate) {
-      elements.distanceNote.textContent = `${approximationNote} 順番と走行時間は${avoidNote} 地図線と距離は直線ベースの表示です。渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
+      elements.distanceNote.textContent = `${approximationNote} 順番と走行時間は${avoidNote} 地図線と距離は直線ベースの表示です。Googleマップは高速道路・有料道路を避ける設定で開きます。渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
       return;
     }
     if (optimizationMode === "manual") {
       elements.distanceNote.textContent = `${approximationNote} 手動で変更した順番で、高速道路を避けた道路距離・走行時間を再計算しています。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。`.trim();
       return;
     }
-    elements.distanceNote.textContent = `${approximationNote} 順番・道路距離・走行時間は${avoidNote} 渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
+    elements.distanceNote.textContent = `${approximationNote} 順番・道路距離・走行時間は${avoidNote} Googleマップは高速道路・有料道路を避ける設定で開きます。渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
   }
 
   function renderRouteList(route) {
@@ -1721,6 +1759,11 @@
     }));
     if (returnToStart) {
       targets.push({ order: "着", name: "事業所", details: [facilityAddress] });
+    }
+    if (!Array.isArray(roadRoute.legs) || roadRoute.legs.length < targets.length) {
+      elements.schedule.classList.add("is-visible");
+      elements.schedule.innerHTML = "<h3>到着予定</h3><p class=\"schedule-empty\">道路ルートの区間情報が不足しているため、到着予定時刻は表示できません。</p>";
+      return;
     }
     const rows = targets.map((target, index) => {
       const leg = roadRoute.legs[index];
@@ -1991,9 +2034,14 @@
     const startTime = route && route.departureTime ? route.departureTime : "";
     const contact = String(course.contact || "").trim();
     const weekLabel = formatPrintWeekRange(printDays, course);
+    const isCalculated = hasCalculatedPrintRoute(route);
+    const statusLabel = isCalculated ? "" : "<span class=\"print-status-label\">未計算・入力順</span>";
+    const note = isCalculated
+      ? "枠内は送迎利用チェック欄です。休み予定は「休」、祝日は灰色で表示します。順番と時刻は高速道路を避けた道路ルートをもとにした目安です。"
+      : "枠内は送迎利用チェック欄です。休み予定は「休」、祝日は灰色で表示します。このコースは未計算のため、利用者は入力順で表示し、時刻は空欄です。";
     return `
       <article class="print-course-page">
-        <h2>☆${escapeHtml(course.name)} ${escapeHtml(formatPrintMonthLabel(course))}の送迎表☆<span class="print-week-label">${escapeHtml(weekLabel)}</span>${contact ? `TEL：${escapeHtml(contact)}` : ""}</h2>
+        <h2>☆${escapeHtml(course.name)} ${escapeHtml(formatPrintMonthLabel(course, printDays))}の送迎表☆<span class="print-week-label">${escapeHtml(weekLabel)}</span>${statusLabel}${contact ? `TEL：${escapeHtml(contact)}` : ""}</h2>
         <div class="print-driver-row">
           <span>送迎者</span>
           <span class="print-driver-line"></span>
@@ -2020,9 +2068,13 @@
             <tbody>${rows || `<tr><td colspan="${printDays.length + 3}" class="print-empty-row">利用者情報がありません。</td></tr>`}</tbody>
           </table>
         </div>
-        <p class="print-note">枠内は送迎利用チェック欄です。休み予定は「休」、祝日は灰色で表示します。順番と時刻は道路ルートをもとにした目安です。</p>
+        <p class="print-note">${escapeHtml(note)}</p>
       </article>
     `;
+  }
+
+  function hasCalculatedPrintRoute(route) {
+    return Boolean(route && Array.isArray(route.ordered) && route.ordered.length > 0);
   }
 
   function buildAttendancePrintRow(stop, index, printDays, scheduleItem) {
@@ -2045,7 +2097,7 @@
 
   function buildPrintDayHeader(day) {
     const classes = ["print-day"];
-    if (!day.day) {
+    if (day.isOutsideMonth) {
       classes.push("is-outside-month");
     }
     if (day.isHoliday) {
@@ -2058,7 +2110,7 @@
 
   function buildPrintUsageCell(stop, day, isFirstRow) {
     const classes = ["print-day"];
-    if (!day.day) {
+    if (day.isOutsideMonth) {
       classes.push("is-outside-month");
     }
     if (day.isHoliday) {
@@ -2220,7 +2272,13 @@
     return [now.getFullYear(), now.getMonth() + 1];
   }
 
-  function formatPrintMonthLabel(course) {
+  function formatPrintMonthLabel(course, printDays) {
+    if (state.printRange === "week" && Array.isArray(printDays) && printDays.length > 0) {
+      const dayInWeekMonth = printDays.find((day) => !day.isOutsideMonth) || printDays[0];
+      if (dayInWeekMonth && dayInWeekMonth.year && dayInWeekMonth.month) {
+        return `${dayInWeekMonth.year}年${dayInWeekMonth.month}月`;
+      }
+    }
     const [year, month] = getCoursePrintYearMonth(course);
     return `${year}年${month}月`;
   }
@@ -2349,6 +2407,7 @@
     getCoursePrintWeeks,
     getCourseRestDateChoices,
     buildPrintableRouteStops,
+    buildPrintCoursePage,
     getCalculationStops,
     getPrintableCourseEntries,
     buildScheduleByStopId,
@@ -2360,7 +2419,9 @@
     hydrateCoursesFromStorage,
     normalizeAddress,
     buildGeocodeCandidates,
-    isPlausibleGeocodeHit
+    isPlausibleGeocodeHit,
+    geocodeAddress,
+    fetchRoadRoute
   };
 
   if (document.readyState === "loading") {

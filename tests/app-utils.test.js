@@ -12,10 +12,12 @@ const context = {
     createElement() { return {}; }
   },
   console,
+  URL,
   URLSearchParams,
   setTimeout,
   clearTimeout
 };
+context.window.setTimeout = (callback) => setTimeout(callback, 0);
 
 vm.createContext(context);
 vm.runInContext(code, context);
@@ -367,4 +369,84 @@ assert.strictEqual(
   "legacy day-based rest settings should hydrate into date-based rest settings"
 );
 
-console.log("course and place utility tests passed");
+const arrayPayloadCourses = utils.hydrateCoursesFromStorage([{
+  name: "配列保存コース",
+  stops: [{ name: "利用者D", place: "施設D", address: "" }]
+}]);
+assert.strictEqual(arrayPayloadCourses[0].name, "配列保存コース", "versionless array payloads should be recovered when possible");
+assert.strictEqual(arrayPayloadCourses[0].stops[0].name, "利用者D", "versionless array payload stops should be recovered");
+
+const malformedRestoredCourses = utils.hydrateCoursesFromStorage({
+  version: 1,
+  courses: [
+    {
+      name: "一部破損コース",
+      stops: [null, { name: "利用者E", place: "施設E", address: "" }]
+    },
+    null
+  ]
+});
+assert.strictEqual(malformedRestoredCourses[0].name, "一部破損コース", "valid course data should survive malformed siblings");
+assert.strictEqual(malformedRestoredCourses[0].stops.length, 1, "malformed stop entries should be skipped");
+assert.strictEqual(malformedRestoredCourses[0].stops[0].name, "利用者E", "valid stop entries should survive malformed siblings");
+assert.strictEqual(malformedRestoredCourses[1].name, "コース2", "malformed course entries should fall back to defaults");
+
+assert.ok(
+  utils.buildPrintCoursePage(
+    { name: "未計算コース", contact: "", targetMonth: "2026-07", targetDate: "2026-07-03", stops: [{ id: "a", name: "利用者F", place: "施設F", address: "" }] },
+    null,
+    utils.getCoursePrintWeek({ targetMonth: "2026-07", targetDate: "2026-07-03" })
+  ).includes("未計算"),
+  "print sheets without a calculated route should clearly show that they are uncalculated"
+);
+
+async function runAsyncUtilityTests() {
+  const originalFetch = context.window.fetch;
+
+  const geocodeCalls = [];
+  context.window.fetch = async (url) => {
+    geocodeCalls.push(new URL(url).searchParams.get("q"));
+    if (geocodeCalls.length === 1) {
+      return { ok: false, status: 500, json: async () => ({}) };
+    }
+    return {
+      ok: true,
+      json: async () => ([{
+        lat: "26.212400",
+        lon: "127.680900",
+        display_name: "泉崎, 那覇市, 沖縄県, 日本"
+      }])
+    };
+  };
+  const geocoded = await utils.geocodeAddress("〒900-0021 沖縄県 那覇市 泉崎1丁目1-1");
+  assert.ok(geocoded, "geocoding should continue to later candidates after one candidate network error");
+  assert.strictEqual(geocodeCalls.length >= 2, true, "geocoding should try another candidate after a transient candidate error");
+
+  context.window.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      routes: [{
+        distance: 1000,
+        duration: 600,
+        legs: [],
+        geometry: { coordinates: [] }
+      }]
+    })
+  });
+  const malformedRoute = await utils.fetchRoadRoute([
+    { lat: 26.2124, lng: 127.6809 },
+    { lat: 26.3344, lng: 127.8056 }
+  ]);
+  assert.strictEqual(malformedRoute, null, "malformed OSRM routes with missing legs should be ignored instead of crashing later");
+
+  context.window.fetch = originalFetch;
+}
+
+runAsyncUtilityTests()
+  .then(() => {
+    console.log("course and place utility tests passed");
+  })
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });

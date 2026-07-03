@@ -1385,6 +1385,16 @@ input[type="number"]:focus {
     font-weight: 700;
   }
 
+  .print-status-label {
+    display: inline-block;
+    margin: 0 8px 0 0;
+    padding: 1px 5px;
+    border: 1px solid #000;
+    font-size: 8pt;
+    font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    font-weight: 700;
+  }
+
   .print-driver-row {
     display: grid;
     grid-template-columns: auto 1fr auto auto 64px;
@@ -1517,6 +1527,15 @@ input[type="number"]:focus {
 
   .print-day.is-holiday {
     background: #d9d9d9;
+  }
+
+  .print-day.is-outside-month {
+    background: #eeeeee;
+    color: #555;
+  }
+
+  .print-day.is-holiday.is-outside-month {
+    background: #d4d4d4;
   }
 
   .print-rest-mark {
