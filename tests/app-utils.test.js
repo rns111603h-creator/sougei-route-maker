@@ -143,6 +143,19 @@ assert.ok(
     .some((choice) => choice.dateKey === "2026-07-03"),
   "rest-day choices should include next-month weekdays shown on the print sheet"
 );
+const julyPrintWeeks = utils.getCoursePrintWeeks({ targetMonth: "2026-07", targetDate: "2026-07-15" });
+assert.strictEqual(julyPrintWeeks.length, 5, "monthly print should include every Monday-Friday sheet needed for the month");
+assert.strictEqual(
+  JSON.stringify(julyPrintWeeks.map((week) => week.map((day) => day.dateKey))),
+  JSON.stringify([
+    ["2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03"],
+    ["2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09", "2026-07-10"],
+    ["2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17"],
+    ["2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24"],
+    ["2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31"]
+  ]),
+  "monthly print weeks should preserve five weekdays per page and include outside-month days only when they share a target-month week"
+);
 assert.strictEqual(utils.getJapaneseHolidayName(new Date(2026, 4, 5)), "こどもの日", "Japanese holidays should be marked for print");
 assert.strictEqual(utils.getJapaneseHolidayName(new Date(2026, 4, 6)), "振替休日", "substitute holidays should be marked for print");
 
@@ -181,8 +194,8 @@ assert.strictEqual(
       { id: "b", name: "B", place: "施設B", address: "", restDates: ["2026-06-30"] }
     ]
   }).map((stop) => stop.id)),
-  JSON.stringify(["a"]),
-  "calculation should exclude only users resting on the selected route date"
+  JSON.stringify(["a", "b"]),
+  "calculation should keep resting users in the route because rest marks are for the monthly print sheet"
 );
 assert.strictEqual(
   JSON.stringify(utils.moveItemInList(unsortedStops, 2, 0).map((stop) => stop.id)),

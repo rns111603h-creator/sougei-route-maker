@@ -213,6 +213,17 @@
             <a id="google-map-link" class="map-button" href="#" target="_blank" rel="noopener"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-map"></use></svg>Googleマップで開く</a>
             <button type="button" id="print-route" class="print-button"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-print"></use></svg>ルート表を印刷</button>
           </div>
+          <fieldset class="print-range-control" aria-label="印刷範囲">
+            <legend>印刷範囲</legend>
+            <label>
+              <input type="radio" name="print-range" value="month" checked>
+              <span>1ヶ月分</span>
+            </label>
+            <label>
+              <input type="radio" name="print-range" value="week">
+              <span>選択中の週</span>
+            </label>
+          </fieldset>
         </div>
       </section>
     </main>

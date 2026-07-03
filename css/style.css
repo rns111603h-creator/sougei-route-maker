@@ -1114,6 +1114,42 @@ input[type="number"]:focus {
   background: var(--ink);
 }
 
+.print-range-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.print-range-control legend {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.print-range-control label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px;
+  color: var(--ink);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.print-range-control input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--gold-dark);
+}
+
 .app-footer {
   margin-top: 20px;
   padding: 18px 28px;
@@ -1340,6 +1376,13 @@ input[type="number"]:focus {
     font-size: 15pt;
     font-weight: 700;
     text-align: left;
+  }
+
+  .print-week-label {
+    margin: 0 8px;
+    font-size: 10pt;
+    font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    font-weight: 700;
   }
 
   .print-driver-row {

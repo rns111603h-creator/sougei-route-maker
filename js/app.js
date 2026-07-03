@@ -18,7 +18,8 @@
     map: null,
     layer: null,
     savedFacilityLocation: null,
-    useSavedFacilityLocation: false
+    useSavedFacilityLocation: false,
+    printRange: "month"
   };
 
   const elements = {};
@@ -217,7 +218,6 @@
 
   function getCalculationStops(course) {
     const sourceCourse = course || {};
-    const targetDateKey = getTargetDateKey(sourceCourse);
     return (Array.isArray(sourceCourse.stops) ? sourceCourse.stops : [])
       .map((stop) => ({
         ...stop,
@@ -227,8 +227,7 @@
         restDays: normalizeRestDays(stop.restDays),
         restDates: getStopRestDates(stop, sourceCourse)
       }))
-      .filter((stop) => buildStopSearchQueries(stop).length > 0)
-      .filter((stop) => !(targetDateKey && isStopRestOnDate(stop, targetDateKey, sourceCourse)));
+      .filter((stop) => buildStopSearchQueries(stop).length > 0);
   }
 
   function sortStopsByRouteOrder(stops, orderedStops) {
@@ -872,6 +871,7 @@
     elements.failedAddresses = document.getElementById("failed-addresses");
     elements.googleMapLink = document.getElementById("google-map-link");
     elements.printRoute = document.getElementById("print-route");
+    elements.printRangeInputs = document.querySelectorAll('input[name="print-range"]');
     elements.printSheet = document.getElementById("print-sheet");
   }
 
@@ -883,6 +883,9 @@
     elements.addStop.addEventListener("click", () => addStop());
     elements.calculateRoute.addEventListener("click", calculateRoute);
     elements.printRoute.addEventListener("click", () => window.print());
+    elements.printRangeInputs.forEach((input) => {
+      input.addEventListener("change", () => setPrintRange(input.value));
+    });
     elements.courseName.addEventListener("input", updateActiveCourseName);
     elements.courseContact.addEventListener("input", updateActiveCourseContact);
     elements.courseMonth.addEventListener("input", updateActiveCourseMonth);
@@ -1055,6 +1058,17 @@
     }
   }
 
+  function setPrintRange(range) {
+    state.printRange = range === "week" ? "week" : "month";
+    elements.printRangeInputs.forEach((input) => {
+      input.checked = input.value === state.printRange;
+    });
+    const course = getActiveCourse();
+    if (course.lastRoute) {
+      renderPrintSheet(course.lastRoute.facilityAddress, course.lastRoute.ordered, course.lastRoute.returnToStart, course.lastRoute.schedule || []);
+    }
+  }
+
   function loadSavedFacilityLocation() {
     try {
       const raw = window.localStorage.getItem(SAVED_FACILITY_KEY);
@@ -1207,7 +1221,9 @@
             summary.textContent = buildRestSummary(stop, course);
           }
           updateCalculationSummary();
-          invalidateActiveRoute("休み日を変更しました。もう一度ルートを計算してください。");
+          if (course.lastRoute) {
+            renderPrintSheet(course.lastRoute.facilityAddress, course.lastRoute.ordered, course.lastRoute.returnToStart, course.lastRoute.schedule || []);
+          }
         });
       });
       row.querySelector(".delete-stop").addEventListener("click", () => removeStop(stop.id));
@@ -1222,13 +1238,9 @@
     }
     const facilityReady = Boolean(elements.facilityAddress.value.trim()) || Boolean(state.useSavedFacilityLocation && state.savedFacilityLocation);
     const course = getActiveCourse();
-    const allSearchableStops = course.stops.filter((stop) => buildStopSearchQueries(stop).length > 0);
     const stopCount = getCalculationStops(course).length;
-    const restCount = Math.max(allSearchableStops.length - stopCount, 0);
     if (facilityReady && stopCount > 0) {
-      elements.calculationSummary.textContent = restCount > 0
-        ? `事業所と送迎利用者${stopCount}件で計算します（休み${restCount}件を除く）。`
-        : `事業所と送迎利用者${stopCount}件で計算します。`;
+      elements.calculationSummary.textContent = `事業所と送迎利用者${stopCount}件で計算します。休み予定は印刷用送迎表に反映します。`;
       elements.calculationSummary.classList.add("is-ready");
       return;
     }
@@ -1269,7 +1281,6 @@
     const useSavedFacility = !facilityAddress && state.useSavedFacilityLocation && state.savedFacilityLocation;
     const facilityLabel = useSavedFacility ? "保存した事業所位置" : facilityAddress;
     const course = getActiveCourse();
-    const targetDateKey = getTargetDateKey(course);
     const activeStops = getCalculationStops(course);
 
     hideFormMessage();
@@ -1282,9 +1293,7 @@
     }
 
     if (activeStops.length === 0) {
-      showFormMessage(targetDateKey
-        ? "Step 3：ルート計算日に送迎対象となる利用者の場所名または住所を1件以上入力してください。休み日にチェックが入っている利用者は計算から外れます。"
-        : "Step 3：利用者の場所名または住所を1件以上入力してください。");
+      showFormMessage("Step 3：利用者の場所名または住所を1件以上入力してください。");
       return;
     }
 
@@ -1873,7 +1882,7 @@
       : [{ course: activeCourse, route: { facilityAddress, ordered, returnToStart, schedule } }];
 
     elements.printSheet.innerHTML = coursesToPrint
-      .map(({ course, route }) => buildPrintCoursePage(course, route))
+      .map(({ course, route }) => buildPrintCoursePages(course, route))
       .join("");
   }
 
@@ -1923,16 +1932,25 @@
     return scheduleByStopId;
   }
 
-  function buildPrintCoursePage(course, route) {
-    const printDays = getCoursePrintWeek(course);
+  function buildPrintCoursePages(course, route) {
+    const printWeeks = state.printRange === "week"
+      ? [getCoursePrintWeek(course)]
+      : getCoursePrintWeeks(course);
+    return printWeeks
+      .map((printDays) => buildPrintCoursePage(course, route, printDays))
+      .join("");
+  }
+
+  function buildPrintCoursePage(course, route, printDays) {
     const routeStops = buildPrintableRouteStops(course, route);
     const routeScheduleByStopId = buildScheduleByStopId(route);
     const rows = routeStops.map((stop, index) => buildAttendancePrintRow(stop, index, printDays, routeScheduleByStopId.get(stop.id))).join("");
     const startTime = route && route.departureTime ? route.departureTime : "";
     const contact = String(course.contact || "").trim();
+    const weekLabel = formatPrintWeekRange(printDays, course);
     return `
       <article class="print-course-page">
-        <h2>☆${escapeHtml(course.name)} ${escapeHtml(formatPrintMonthLabel(course))}の送迎表☆${contact ? `TEL：${escapeHtml(contact)}` : ""}</h2>
+        <h2>☆${escapeHtml(course.name)} ${escapeHtml(formatPrintMonthLabel(course))}の送迎表☆<span class="print-week-label">${escapeHtml(weekLabel)}</span>${contact ? `TEL：${escapeHtml(contact)}` : ""}</h2>
         <div class="print-driver-row">
           <span>送迎者</span>
           <span class="print-driver-line"></span>
@@ -2020,14 +2038,31 @@
   function getCoursePrintWeek(course) {
     const [year, month] = getCoursePrintYearMonth(course);
     const target = getCoursePrintTargetDate(course, year, month);
-    const weekStart = new Date(target.getFullYear(), target.getMonth(), target.getDate());
-    const dayOfWeek = weekStart.getDay();
-    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    weekStart.setDate(weekStart.getDate() - daysFromMonday);
+    return buildPrintWeekFromDate(target, year, month);
+  }
 
+  function getCoursePrintWeeks(course) {
+    const [year, month] = getCoursePrintYearMonth(course);
+    const firstWeekday = getFirstWeekdayOfMonth(year, month);
+    const lastWeekday = getLastWeekdayOfMonth(year, month);
+    const weeks = [];
+    if (!firstWeekday || !lastWeekday) {
+      return weeks;
+    }
+    const current = getMondayOfWeek(firstWeekday);
+    const lastWeekStart = getMondayOfWeek(lastWeekday);
+    while (current <= lastWeekStart) {
+      weeks.push(buildPrintWeekFromDate(current, year, month));
+      current.setDate(current.getDate() + 7);
+    }
+    return weeks;
+  }
+
+  function buildPrintWeekFromDate(target, targetYear, targetMonth) {
+    const weekStart = getMondayOfWeek(target);
     return Array.from({ length: 5 }, (_, index) => {
       const date = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + index);
-      const inTargetMonth = date.getFullYear() === year && date.getMonth() + 1 === month;
+      const inTargetMonth = date.getFullYear() === targetYear && date.getMonth() + 1 === targetMonth;
       const holidayName = getJapaneseHolidayName(date);
       return {
         year: date.getFullYear(),
@@ -2041,6 +2076,45 @@
         holidayName
       };
     });
+  }
+
+  function getMondayOfWeek(sourceDate) {
+    const date = new Date(sourceDate.getFullYear(), sourceDate.getMonth(), sourceDate.getDate());
+    const dayOfWeek = date.getDay();
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    date.setDate(date.getDate() - daysFromMonday);
+    return date;
+  }
+
+  function getFirstWeekdayOfMonth(year, month) {
+    const date = new Date(year, month - 1, 1);
+    while (date.getMonth() + 1 === month) {
+      const weekday = date.getDay();
+      if (weekday >= 1 && weekday <= 5) {
+        return date;
+      }
+      date.setDate(date.getDate() + 1);
+    }
+    return null;
+  }
+
+  function getLastWeekdayOfMonth(year, month) {
+    const date = new Date(year, month, 0);
+    while (date.getMonth() + 1 === month) {
+      const weekday = date.getDay();
+      if (weekday >= 1 && weekday <= 5) {
+        return date;
+      }
+      date.setDate(date.getDate() - 1);
+    }
+    return null;
+  }
+
+  function formatPrintWeekRange(printDays, course) {
+    if (!Array.isArray(printDays) || printDays.length === 0) {
+      return "";
+    }
+    return `（${formatRestDateLabel(printDays[0].dateKey, course)}〜${formatRestDateLabel(printDays[printDays.length - 1].dateKey, course)}）`;
   }
 
   function getCourseRestDateChoices(course) {
@@ -2229,6 +2303,7 @@
     isStopRestOnDay,
     isStopRestOnDate,
     getCoursePrintWeek,
+    getCoursePrintWeeks,
     getCourseRestDateChoices,
     buildPrintableRouteStops,
     getCalculationStops,
