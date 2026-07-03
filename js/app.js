@@ -5,9 +5,11 @@
   const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
   const OSRM_ROUTE_ENDPOINT = "https://router.project-osrm.org/route/v1/driving";
   const OSRM_TABLE_ENDPOINT = "https://router.project-osrm.org/table/v1/driving";
+  const OSRM_AVOID_CLASSES = "motorway";
+  const GOOGLE_MAPS_AVOID = "highways,tolls";
   const SAVED_FACILITY_KEY = "sougeiRouteMaker.savedFacilityLocation";
   const SAVED_COURSES_KEY = "sougeiRouteMaker.savedCourses";
-  const MAX_COURSES = 4;
+  const MAX_COURSES = 8;
   const INITIAL_STOP_ROWS = 1;
   const PREFECTURE_PATTERN = /(北海道|東京都|京都府|大阪府|(?:青森|岩手|宮城|秋田|山形|福島|茨城|栃木|群馬|埼玉|千葉|神奈川|新潟|富山|石川|福井|山梨|長野|岐阜|静岡|愛知|三重|滋賀|兵庫|奈良|和歌山|鳥取|島根|岡山|広島|山口|徳島|香川|愛媛|高知|福岡|佐賀|長崎|熊本|大分|宮崎|鹿児島|沖縄)県)/;
 
@@ -19,7 +21,8 @@
     layer: null,
     savedFacilityLocation: null,
     useSavedFacilityLocation: false,
-    printRange: "month"
+    printRange: "month",
+    printCourseScope: "active"
   };
 
   const elements = {};
@@ -650,7 +653,8 @@
       api: "1",
       origin,
       destination,
-      travelmode: "driving"
+      travelmode: "driving",
+      avoid: GOOGLE_MAPS_AVOID
     });
     if (waypoints.length > 0) {
       params.set("waypoints", waypoints.map(coord).join("|"));
@@ -666,7 +670,8 @@
       overview: "full",
       geometries: "geojson",
       steps: "false",
-      annotations: "duration,distance"
+      annotations: "duration,distance",
+      exclude: OSRM_AVOID_CLASSES
     });
     return `${OSRM_ROUTE_ENDPOINT}/${coordinates}?${params.toString()}`;
   }
@@ -676,7 +681,8 @@
       .map((point) => `${point.lng.toFixed(6)},${point.lat.toFixed(6)}`)
       .join(";");
     const params = new URLSearchParams({
-      annotations: "duration"
+      annotations: "duration",
+      exclude: OSRM_AVOID_CLASSES
     });
     return `${OSRM_TABLE_ENDPOINT}/${coordinates}?${params.toString()}`;
   }
@@ -872,6 +878,7 @@
     elements.googleMapLink = document.getElementById("google-map-link");
     elements.printRoute = document.getElementById("print-route");
     elements.printRangeInputs = document.querySelectorAll('input[name="print-range"]');
+    elements.printCourseScopeInputs = document.querySelectorAll('input[name="print-course-scope"]');
     elements.printSheet = document.getElementById("print-sheet");
   }
 
@@ -885,6 +892,9 @@
     elements.printRoute.addEventListener("click", () => window.print());
     elements.printRangeInputs.forEach((input) => {
       input.addEventListener("change", () => setPrintRange(input.value));
+    });
+    elements.printCourseScopeInputs.forEach((input) => {
+      input.addEventListener("change", () => setPrintCourseScope(input.value));
     });
     elements.courseName.addEventListener("input", updateActiveCourseName);
     elements.courseContact.addEventListener("input", updateActiveCourseContact);
@@ -1062,6 +1072,17 @@
     state.printRange = range === "week" ? "week" : "month";
     elements.printRangeInputs.forEach((input) => {
       input.checked = input.value === state.printRange;
+    });
+    const course = getActiveCourse();
+    if (course.lastRoute) {
+      renderPrintSheet(course.lastRoute.facilityAddress, course.lastRoute.ordered, course.lastRoute.returnToStart, course.lastRoute.schedule || []);
+    }
+  }
+
+  function setPrintCourseScope(scope) {
+    state.printCourseScope = scope === "all" ? "all" : "active";
+    elements.printCourseScopeInputs.forEach((input) => {
+      input.checked = input.value === state.printCourseScope;
     });
     const course = getActiveCourse();
     if (course.lastRoute) {
@@ -1513,19 +1534,20 @@
     const approximationNote = points.some((point) => point.isApproximate)
       ? "一部の住所は番地まで見つからなかったため、丁目などの代表地点で表示しています。Googleマップや現場判断で位置を確認してください。"
       : "";
+    const avoidNote = "高速道路を避けた道路時間をもとにした目安です。Googleマップは高速道路・有料道路を避ける設定で開きます。";
     if (optimizationMode === "straight-line") {
-      elements.distanceNote.textContent = `${approximationNote} OSRMの道路時間を取得できなかったため、直線距離を使って順番を計算しています。実際の走行時間はGoogleマップや現場判断で確認してください。`.trim();
+      elements.distanceNote.textContent = `${approximationNote} OSRMの道路時間を取得できなかったため、直線距離を使って順番を計算しています。実際の走行時間は高速道路・有料道路を避ける設定のGoogleマップや現場判断で確認してください。`.trim();
       return;
     }
     if (roadRoute && roadRoute.isDurationMatrixEstimate) {
-      elements.distanceNote.textContent = `${approximationNote} 順番と走行時間はOSRMの道路時間をもとにした目安です。地図線と距離は直線ベースの表示です。渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
+      elements.distanceNote.textContent = `${approximationNote} 順番と走行時間は${avoidNote} 地図線と距離は直線ベースの表示です。渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
       return;
     }
     if (optimizationMode === "manual") {
-      elements.distanceNote.textContent = `${approximationNote} 手動で変更した順番で道路距離・走行時間を再計算しています。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。`.trim();
+      elements.distanceNote.textContent = `${approximationNote} 手動で変更した順番で、高速道路を避けた道路距離・走行時間を再計算しています。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。`.trim();
       return;
     }
-    elements.distanceNote.textContent = `${approximationNote} 順番・道路距離・走行時間はOSRMによる目安です。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。`.trim();
+    elements.distanceNote.textContent = `${approximationNote} 順番・道路距離・走行時間は${avoidNote} 渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
   }
 
   function renderRouteList(route) {
@@ -1868,14 +1890,14 @@
 
   function renderPrintSheet(facilityAddress, ordered, returnToStart, schedule) {
     const activeCourse = getActiveCourse();
-    const printableCourses = state.courses
-      .map((course) => ({
-        course,
-        route: course === activeCourse
-          ? { facilityAddress, ordered, returnToStart, schedule, departureTime: activeCourse.lastRoute && activeCourse.lastRoute.departureTime }
-          : course.lastRoute
-      }))
-      .filter(({ course }) => courseHasPrintableStops(course));
+    const activeRoute = {
+      facilityAddress,
+      ordered,
+      returnToStart,
+      schedule,
+      departureTime: activeCourse.lastRoute && activeCourse.lastRoute.departureTime
+    };
+    const printableCourses = getPrintableCourseEntries(state, activeRoute);
 
     const coursesToPrint = printableCourses.length > 0
       ? printableCourses
@@ -1887,11 +1909,32 @@
   }
 
   function courseHasPrintableStops(course) {
-    return course.stops.some((stop) => String(stop.name || stop.place || stop.address || "").trim());
+    return Boolean(course && Array.isArray(course.stops) && course.stops.some(hasPrintableStopInfo));
   }
 
   function hasPrintableStopInfo(stop) {
     return Boolean(String(stop && (stop.name || stop.place || stop.address) || "").trim());
+  }
+
+  function getPrintableCourseEntries(context, activeRouteOverride) {
+    const courses = Array.isArray(context && context.courses) ? context.courses : [];
+    if (courses.length === 0) {
+      return [];
+    }
+    const activeIndex = Number.isInteger(context.activeCourseIndex) ? context.activeCourseIndex : 0;
+    const activeCourse = courses[activeIndex] || courses[0];
+    const activeRoute = activeRouteOverride || (activeCourse && activeCourse.lastRoute) || null;
+    const toEntry = (course) => ({
+      course,
+      route: course === activeCourse ? activeRoute : course.lastRoute
+    });
+
+    if (context.printCourseScope !== "all") {
+      return activeCourse ? [toEntry(activeCourse)] : [];
+    }
+    return courses
+      .filter(courseHasPrintableStops)
+      .map(toEntry);
   }
 
   function buildPrintableRouteStops(course, route) {
@@ -2307,6 +2350,7 @@
     getCourseRestDateChoices,
     buildPrintableRouteStops,
     getCalculationStops,
+    getPrintableCourseEntries,
     buildScheduleByStopId,
     getPrintUsageCellContent,
     getJapaneseHolidayName,

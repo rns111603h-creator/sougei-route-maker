@@ -203,7 +203,7 @@
               <div class="summary-label">走行時間の目安</div>
             </div>
           </div>
-          <p id="distance-note" class="distance-note">道路時間をもとに、始発から終着までの走行時間が短くなる順番を計算します。</p>
+          <p id="distance-note" class="distance-note">高速道路を避けた道路時間をもとに、始発から終着までの走行時間が短くなる順番を計算します。Googleマップも高速道路・有料道路を避ける設定で開きます。</p>
 
           <ol id="route-list" class="route-list"></ol>
           <div id="schedule" class="schedule-panel"></div>
@@ -222,6 +222,17 @@
             <label>
               <input type="radio" name="print-range" value="week">
               <span>選択中の週</span>
+            </label>
+          </fieldset>
+          <fieldset class="print-range-control" aria-label="印刷するコース">
+            <legend>印刷するコース</legend>
+            <label>
+              <input type="radio" name="print-course-scope" value="active" checked>
+              <span>選択中のみ</span>
+            </label>
+            <label>
+              <input type="radio" name="print-course-scope" value="all">
+              <span>すべてのコース</span>
             </label>
           </fieldset>
         </div>

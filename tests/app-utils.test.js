@@ -24,8 +24,8 @@ const utils = context.window.RouteMakerUtils;
 assert.ok(utils, "RouteMakerUtils should be exposed on window");
 
 const courses = utils.createInitialCourses();
-assert.strictEqual(courses.length, 4, "should create up to four courses");
-assert.strictEqual(JSON.stringify(courses.map((course) => course.name)), JSON.stringify(["コース1", "コース2", "コース3", "コース4"]));
+assert.strictEqual(courses.length, 8, "should create up to eight courses");
+assert.strictEqual(JSON.stringify(courses.map((course) => course.name)), JSON.stringify(["コース1", "コース2", "コース3", "コース4", "コース5", "コース6", "コース7", "コース8"]));
 assert.strictEqual(courses[0].contact, "", "course contact should start empty");
 assert.strictEqual(courses[0].targetMonth, "", "course target month should start empty");
 assert.strictEqual(courses[0].targetDate, "", "course target date should start empty");
@@ -40,6 +40,17 @@ courses[0].stops[0].name = "Aさん";
 courses[1].stops[0].name = "Bさん";
 assert.strictEqual(courses[0].stops[0].name, "Aさん");
 assert.strictEqual(courses[1].stops[0].name, "Bさん");
+const hydratedFourCourses = utils.hydrateCoursesFromStorage({
+  version: 1,
+  courses: [
+    { name: "A", contact: "", targetMonth: "", targetDate: "", stops: [] },
+    { name: "B", contact: "", targetMonth: "", targetDate: "", stops: [] },
+    { name: "C", contact: "", targetMonth: "", targetDate: "", stops: [] },
+    { name: "D", contact: "", targetMonth: "", targetDate: "", stops: [] }
+  ]
+});
+assert.strictEqual(hydratedFourCourses.length, 8, "old saved data should be expanded to eight courses");
+assert.strictEqual(hydratedFourCourses[4].name, "コース5", "newly added courses should keep default names");
 
 const stopWithPlaceAndAddress = {
   name: "利用者A",
@@ -98,6 +109,21 @@ const stopWithoutPlace = {
 assert.strictEqual(JSON.stringify(utils.buildStopSearchQueries(stopWithoutPlace)), JSON.stringify(["沖縄県那覇市泉崎1丁目1-1"]));
 assert.strictEqual(utils.getStopDisplayName(stopWithoutPlace), "利用者B");
 assert.strictEqual(utils.getPrintPlaceName(stopWithoutPlace), "", "address-only stops should leave the print place blank");
+
+const googleUrl = new URL(utils.buildGoogleMapsUrl(
+  { lat: 26.2124, lng: 127.6809 },
+  [{ lat: 26.3344, lng: 127.8056 }, { lat: 26.5915, lng: 127.9773 }],
+  true
+));
+assert.strictEqual(googleUrl.searchParams.get("avoid"), "highways,tolls", "Google Maps URL should request routes that avoid highways and tolls");
+assert.ok(
+  utils.buildOsrmRouteUrl([{ lat: 26.2124, lng: 127.6809 }, { lat: 26.3344, lng: 127.8056 }]).includes("exclude=motorway"),
+  "OSRM route requests should exclude motorways for no-expressway route previews"
+);
+assert.ok(
+  utils.buildOsrmTableUrl([{ lat: 26.2124, lng: 127.6809 }, { lat: 26.3344, lng: 127.8056 }]).includes("exclude=motorway"),
+  "OSRM table requests should exclude motorways for no-expressway route ordering"
+);
 
 assert.strictEqual(JSON.stringify(utils.parseRestDays("1, 3 5,31,32,0,abc,3")), JSON.stringify([1, 3, 5, 31]), "rest days should be normalized to unique valid day numbers");
 assert.strictEqual(utils.isStopRestOnDay({ restDays: [1, 3, 5] }, 3), true, "checked rest day should be detected");
@@ -239,6 +265,31 @@ assert.ok(
   utils.getPrintUsageCellContent(printCourse.stops[2], { day: 30, dateKey: "2026-06-30" }, true).includes("print-rest-mark"),
   "print cells should show a rest mark for users with a rest setting on that date"
 );
+assert.strictEqual(
+  JSON.stringify(utils.getPrintableCourseEntries({
+    courses: [
+      { id: "course-1", name: "A", stops: [{ name: "利用者A" }] },
+      { id: "course-2", name: "B", stops: [{ name: "利用者B" }] }
+    ],
+    activeCourseIndex: 1,
+    printCourseScope: "active"
+  }).map(({ course }) => course.name)),
+  JSON.stringify(["B"]),
+  "active-course print scope should print only the selected course"
+);
+assert.strictEqual(
+  JSON.stringify(utils.getPrintableCourseEntries({
+    courses: [
+      { id: "course-1", name: "A", stops: [{ name: "利用者A" }] },
+      { id: "course-2", name: "B", stops: [{ name: "利用者B" }] },
+      { id: "course-3", name: "C", stops: [{ name: "" }] }
+    ],
+    activeCourseIndex: 1,
+    printCourseScope: "all"
+  }).map(({ course }) => course.name)),
+  JSON.stringify(["A", "B"]),
+  "all-course print scope should print every course with printable users"
+);
 
 const routeLegs = [
   { durationSeconds: 600, distanceMeters: 1000 },
@@ -286,7 +337,7 @@ assert.strictEqual(JSON.stringify(savedPayload.courses[0].stops[0].restDates), J
 assert.strictEqual(savedPayload.courses[0].lastRoute, undefined, "calculated route results should not be stored");
 
 const restoredCourses = utils.hydrateCoursesFromStorage(savedPayload);
-assert.strictEqual(restoredCourses.length, 4);
+assert.strictEqual(restoredCourses.length, 8);
 assert.strictEqual(restoredCourses[0].name, "1号車");
 assert.strictEqual(restoredCourses[0].contact, "090-0000-0000");
 assert.strictEqual(restoredCourses[0].targetMonth, "2026-04");
