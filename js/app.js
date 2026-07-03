@@ -108,8 +108,20 @@
     const place = String(stop.place || "").trim();
     const address = String(stop.address || "").trim();
     if (place && address) {
-      queries.push(`${place} ${address}`);
-      queries.push(address);
+      const addressParts = parseJapaneseAddress(address);
+      const cityContext = `${addressParts.state || ""}${addressParts.city || ""}`;
+      [
+        `${place} ${address}`,
+        `${place}, ${address}`,
+        cityContext ? `${place} ${cityContext}` : "",
+        address,
+        place
+      ].forEach((query) => {
+        const trimmed = String(query || "").trim();
+        if (trimmed && !queries.includes(trimmed)) {
+          queries.push(trimmed);
+        }
+      });
       return queries;
     }
     [place, address].forEach((value) => {
@@ -201,6 +213,22 @@
   function getTargetDateKey(course) {
     const date = String(course.targetDate || "").trim();
     return isValidDateKey(date) ? date : "";
+  }
+
+  function getCalculationStops(course) {
+    const sourceCourse = course || {};
+    const targetDateKey = getTargetDateKey(sourceCourse);
+    return (Array.isArray(sourceCourse.stops) ? sourceCourse.stops : [])
+      .map((stop) => ({
+        ...stop,
+        name: String(stop.name || "").trim(),
+        place: String(stop.place || "").trim(),
+        address: String(stop.address || "").trim(),
+        restDays: normalizeRestDays(stop.restDays),
+        restDates: getStopRestDates(stop, sourceCourse)
+      }))
+      .filter((stop) => buildStopSearchQueries(stop).length > 0)
+      .filter((stop) => !(targetDateKey && isStopRestOnDate(stop, targetDateKey, sourceCourse)));
   }
 
   function sortStopsByRouteOrder(stops, orderedStops) {
@@ -451,8 +479,8 @@
     }
   }
 
-  async function geocodeAddress(address) {
-    const candidates = buildGeocodeCandidates(address);
+  async function geocodeAddress(address, options = {}) {
+    const candidates = buildGeocodeCandidates(address, options);
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index];
       if (index > 0) {
@@ -472,7 +500,10 @@
       if (index > 0) {
         await sleep(GEOCODE_DELAY_MS);
       }
-      const location = await geocodeAddress(queries[index]);
+      const place = String(stop.place || "").trim();
+      const location = await geocodeAddress(queries[index], {
+        allowTownMismatch: Boolean(place && queries[index].includes(place))
+      });
       if (location) {
         return {
           ...location,
@@ -514,26 +545,31 @@
     };
   }
 
-  function buildGeocodeCandidates(address) {
+  function buildGeocodeCandidates(address, options = {}) {
     const normalized = normalizeAddress(address);
     const candidates = [];
-    addGeocodeCandidate(candidates, String(address || "").trim(), false);
-    addGeocodeCandidate(candidates, normalized, false);
+    addGeocodeCandidate(candidates, String(address || "").trim(), false, null, options);
+    addGeocodeCandidate(candidates, normalized, false, null, options);
 
     const parts = parseJapaneseAddress(normalized);
     const chomeQuery = buildChomeFallbackQuery(parts);
     if (chomeQuery) {
-      addGeocodeCandidate(candidates, chomeQuery, true, parts);
+      addGeocodeCandidate(candidates, chomeQuery, true, parts, options);
     }
 
     return candidates;
   }
 
-  function addGeocodeCandidate(candidates, query, isApproximate, parts) {
+  function addGeocodeCandidate(candidates, query, isApproximate, parts, options = {}) {
     if (!query || candidates.some((candidate) => candidate.query === query)) {
       return;
     }
-    candidates.push({ query, isApproximate, parts: parts || parseJapaneseAddress(query) });
+    candidates.push({
+      query,
+      isApproximate,
+      parts: parts || parseJapaneseAddress(query),
+      allowTownMismatch: Boolean(options.allowTownMismatch)
+    });
   }
 
   function normalizeAddress(address) {
@@ -573,7 +609,9 @@
   }
 
   function pickNominatimHit(results, candidate) {
-    const matchingHit = results.find((result) => isPlausibleGeocodeHit(result, candidate.parts));
+    const matchingHit = results.find((result) => isPlausibleGeocodeHit(result, candidate.parts, {
+      allowTownMismatch: candidate.allowTownMismatch
+    }));
     if (matchingHit) {
       return matchingHit;
     }
@@ -587,7 +625,7 @@
     return Boolean(parts && (parts.state || parts.city || parts.town));
   }
 
-  function isPlausibleGeocodeHit(result, parts) {
+  function isPlausibleGeocodeHit(result, parts, options = {}) {
     const displayName = result && result.display_name ? normalizeAddress(result.display_name) : "";
     if (!displayName) {
       return false;
@@ -598,7 +636,7 @@
     if (parts.city && !displayName.includes(parts.city)) {
       return false;
     }
-    if (parts.town && !displayName.includes(parts.town)) {
+    if (parts.town && !displayName.includes(parts.town) && !options.allowTownMismatch) {
       return false;
     }
     return true;
@@ -1184,10 +1222,13 @@
     }
     const facilityReady = Boolean(elements.facilityAddress.value.trim()) || Boolean(state.useSavedFacilityLocation && state.savedFacilityLocation);
     const course = getActiveCourse();
-    const targetDateKey = getTargetDateKey(course);
-    const stopCount = course.stops.filter((stop) => buildStopSearchQueries(stop).length > 0 && !(targetDateKey && isStopRestOnDate(stop, targetDateKey, course))).length;
+    const allSearchableStops = course.stops.filter((stop) => buildStopSearchQueries(stop).length > 0);
+    const stopCount = getCalculationStops(course).length;
+    const restCount = Math.max(allSearchableStops.length - stopCount, 0);
     if (facilityReady && stopCount > 0) {
-      elements.calculationSummary.textContent = `事業所と送迎利用者${stopCount}件で計算します。`;
+      elements.calculationSummary.textContent = restCount > 0
+        ? `事業所と送迎利用者${stopCount}件で計算します（休み${restCount}件を除く）。`
+        : `事業所と送迎利用者${stopCount}件で計算します。`;
       elements.calculationSummary.classList.add("is-ready");
       return;
     }
@@ -1229,16 +1270,7 @@
     const facilityLabel = useSavedFacility ? "保存した事業所位置" : facilityAddress;
     const course = getActiveCourse();
     const targetDateKey = getTargetDateKey(course);
-    const activeStops = course.stops
-      .map((stop) => ({
-        ...stop,
-        name: stop.name.trim(),
-        place: stop.place.trim(),
-        address: stop.address.trim(),
-        restDays: normalizeRestDays(stop.restDays),
-        restDates: getStopRestDates(stop, course)
-      }))
-      .filter((stop) => buildStopSearchQueries(stop).length > 0 && !(targetDateKey && isStopRestOnDate(stop, targetDateKey, course)));
+    const activeStops = getCalculationStops(course);
 
     hideFormMessage();
     clearAddressErrors();
@@ -2199,6 +2231,7 @@
     getCoursePrintWeek,
     getCourseRestDateChoices,
     buildPrintableRouteStops,
+    getCalculationStops,
     buildScheduleByStopId,
     getPrintUsageCellContent,
     getJapaneseHolidayName,
