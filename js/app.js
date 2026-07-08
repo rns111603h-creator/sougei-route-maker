@@ -11,6 +11,10 @@
   const SAVED_COURSES_KEY = "sougeiRouteMaker.savedCourses";
   const MAX_COURSES = 8;
   const INITIAL_STOP_ROWS = 1;
+  const SHARE_FILE_TYPE = "sougei-route-maker.encrypted";
+  const SHARE_FILE_VERSION = 1;
+  const SHARE_FILE_EXTENSION = ".sougei";
+  const SHARE_KDF_ITERATIONS = 210000;
   const PREFECTURE_PATTERN = /(北海道|東京都|京都府|大阪府|(?:青森|岩手|宮城|秋田|山形|福島|茨城|栃木|群馬|埼玉|千葉|神奈川|新潟|富山|石川|福井|山梨|長野|岐阜|静岡|愛知|三重|滋賀|兵庫|奈良|和歌山|鳥取|島根|岡山|広島|山口|徳島|香川|愛媛|高知|福岡|佐賀|長崎|熊本|大分|宮崎|鹿児島|沖縄)県)/;
 
   const state = {
@@ -339,6 +343,138 @@
     });
 
     return courses;
+  }
+
+  function getCrypto() {
+    return window.crypto && window.crypto.subtle ? window.crypto : null;
+  }
+
+  function ensurePassphrase(passphrase) {
+    const normalized = String(passphrase || "").trim();
+    if (!normalized) {
+      throw new Error("share_passphrase_required");
+    }
+    return normalized;
+  }
+
+  function bytesToBase64(bytes) {
+    let binary = "";
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return window.btoa(binary);
+  }
+
+  function base64ToBytes(value) {
+    const binary = window.atob(String(value || ""));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  }
+
+  async function deriveShareKey(passphrase, salt, iterations) {
+    const cryptoApi = getCrypto();
+    if (!cryptoApi) {
+      throw new Error("share_crypto_unavailable");
+    }
+    const baseKey = await cryptoApi.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(ensurePassphrase(passphrase)),
+      "PBKDF2",
+      false,
+      ["deriveKey"]
+    );
+    return cryptoApi.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt,
+        iterations,
+        hash: "SHA-256"
+      },
+      baseKey,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"]
+    );
+  }
+
+  async function encryptShareFilePayload(payload, passphrase, options = {}) {
+    const cryptoApi = getCrypto();
+    if (!cryptoApi) {
+      throw new Error("share_crypto_unavailable");
+    }
+    const iterations = Number.isInteger(options.iterations) ? options.iterations : SHARE_KDF_ITERATIONS;
+    const salt = options.salt instanceof Uint8Array ? options.salt : cryptoApi.getRandomValues(new Uint8Array(16));
+    const iv = options.iv instanceof Uint8Array ? options.iv : cryptoApi.getRandomValues(new Uint8Array(12));
+    const key = await deriveShareKey(passphrase, salt, iterations);
+    const plaintext = new TextEncoder().encode(JSON.stringify(payload));
+    const encrypted = await cryptoApi.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
+    return JSON.stringify({
+      type: SHARE_FILE_TYPE,
+      version: SHARE_FILE_VERSION,
+      encrypted: true,
+      algorithm: "AES-GCM",
+      kdf: {
+        name: "PBKDF2",
+        hash: "SHA-256",
+        iterations,
+        salt: bytesToBase64(salt)
+      },
+      iv: bytesToBase64(iv),
+      data: bytesToBase64(new Uint8Array(encrypted))
+    });
+  }
+
+  async function decryptShareFilePayload(fileText, passphrase) {
+    const cryptoApi = getCrypto();
+    if (!cryptoApi) {
+      throw new Error("share_crypto_unavailable");
+    }
+    let envelope = null;
+    try {
+      envelope = JSON.parse(String(fileText || ""));
+    } catch (error) {
+      throw new Error("share_file_invalid");
+    }
+    if (!envelope || envelope.type !== SHARE_FILE_TYPE || envelope.version !== SHARE_FILE_VERSION || !envelope.encrypted) {
+      throw new Error("share_file_invalid");
+    }
+    const salt = base64ToBytes(envelope.kdf && envelope.kdf.salt);
+    const iv = base64ToBytes(envelope.iv);
+    const encrypted = base64ToBytes(envelope.data);
+    const iterations = Number.parseInt(envelope.kdf && envelope.kdf.iterations, 10);
+    if (!salt.length || !iv.length || !encrypted.length || !Number.isInteger(iterations)) {
+      throw new Error("share_file_invalid");
+    }
+    const key = await deriveShareKey(passphrase, salt, iterations);
+    let decrypted = null;
+    try {
+      decrypted = await cryptoApi.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
+    } catch (error) {
+      throw new Error("share_passphrase_invalid");
+    }
+    let payload = null;
+    try {
+      payload = JSON.parse(new TextDecoder().decode(decrypted));
+    } catch (error) {
+      throw new Error("share_file_invalid");
+    }
+    if (!getStoredCourseEntries(payload)) {
+      throw new Error("share_file_invalid");
+    }
+    return payload;
+  }
+
+  function buildShareFileName() {
+    const now = new Date();
+    const stamp = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0")
+    ].join("-");
+    return `sougei-route-${stamp}${SHARE_FILE_EXTENSION}`;
   }
   function distanceKm(a, b) {
     const radiusKm = 6371;
@@ -872,6 +1008,9 @@
     elements.courseTargetDate = document.getElementById("course-target-date");
     elements.saveCourses = document.getElementById("save-courses");
     elements.clearSavedCourses = document.getElementById("clear-saved-courses");
+    elements.exportCourses = document.getElementById("export-courses");
+    elements.importCourses = document.getElementById("import-courses");
+    elements.importCoursesFile = document.getElementById("import-courses-file");
     elements.courseSaveStatus = document.getElementById("course-save-status");
     elements.facilityAddress = document.getElementById("facility-address");
     elements.returnToStart = document.getElementById("return-to-start");
@@ -928,6 +1067,9 @@
     elements.courseTargetDate.addEventListener("input", updateActiveCourseTargetDate);
     elements.saveCourses.addEventListener("click", saveCoursesToBrowser);
     elements.clearSavedCourses.addEventListener("click", clearSavedCourses);
+    elements.exportCourses.addEventListener("click", exportCoursesToShareFile);
+    elements.importCourses.addEventListener("click", () => elements.importCoursesFile.click());
+    elements.importCoursesFile.addEventListener("change", importCoursesFromShareFile);
     elements.modePickup.addEventListener("click", () => setMode("pickup"));
     elements.modeDropoff.addEventListener("click", () => setMode("dropoff"));
     elements.saveCurrentLocation.addEventListener("click", saveCurrentLocationAsFacility);
@@ -1020,6 +1162,70 @@
       updateCourseSaveStatus("コース名・連絡先・立ち寄り先をこの端末に保存しました。");
     } catch (error) {
       updateCourseSaveStatus("コース設定を保存できませんでした。ブラウザの保存領域を確認してください。", "error");
+    }
+  }
+
+  async function exportCoursesToShareFile() {
+    let passphrase = "";
+    try {
+      passphrase = ensurePassphrase(window.prompt("共有ファイルを開くための合言葉を入力してください。合言葉は保存されません。") || "");
+      const confirmation = ensurePassphrase(window.prompt("確認のため、同じ合言葉をもう一度入力してください。") || "");
+      if (passphrase !== confirmation) {
+        updateCourseSaveStatus("合言葉が一致しないため、共有ファイルの書き出しを中止しました。", "error");
+        return;
+      }
+    } catch (error) {
+      updateCourseSaveStatus("共有ファイルの書き出しを中止しました。", "error");
+      return;
+    }
+    try {
+      const encryptedText = await encryptShareFilePayload(serializeCoursesForStorage(state.courses), passphrase);
+      const blob = new Blob([encryptedText], { type: "application/vnd.sougei-route-maker+json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = buildShareFileName();
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      updateCourseSaveStatus("暗号化した共有ファイルを書き出しました。合言葉は別の方法で共有してください。");
+    } catch (error) {
+      updateCourseSaveStatus("共有ファイルを書き出せませんでした。ブラウザの暗号化機能を確認してください。", "error");
+    }
+  }
+
+  async function importCoursesFromShareFile(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+    if (!window.confirm("現在画面にあるコース設定を、共有ファイルの内容で置き換えます。読み込んだだけでは端末に保存されません。")) {
+      updateCourseSaveStatus("共有ファイルの読み込みを中止しました。", "error");
+      return;
+    }
+    let passphrase = "";
+    try {
+      passphrase = ensurePassphrase(window.prompt("共有ファイルの合言葉を入力してください。") || "");
+    } catch (error) {
+      updateCourseSaveStatus("共有ファイルの読み込みを中止しました。", "error");
+      return;
+    }
+    try {
+      const payload = await decryptShareFilePayload(await file.text(), passphrase);
+      state.courses = hydrateCoursesFromStorage(payload);
+      state.activeCourseIndex = 0;
+      hideFormMessage();
+      clearFailedAddresses();
+      renderCourseTabs();
+      renderCourseName();
+      renderStops();
+      updateCalculationSummary();
+      renderStoredCourseResult();
+      updateCourseSaveStatus("共有ファイルを読み込みました。必要に応じて「コース設定を保存」を押してください。");
+    } catch (error) {
+      updateCourseSaveStatus("共有ファイルを読み込めませんでした。ファイルまたは合言葉を確認してください。", "error");
     }
   }
 
@@ -2417,6 +2623,8 @@
     moveItemInList,
     serializeCoursesForStorage,
     hydrateCoursesFromStorage,
+    encryptShareFilePayload,
+    decryptShareFilePayload,
     normalizeAddress,
     buildGeocodeCandidates,
     isPlausibleGeocodeHit,

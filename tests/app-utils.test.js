@@ -1,6 +1,7 @@
 const fs = require("fs");
 const vm = require("vm");
 const assert = require("assert");
+const { webcrypto } = require("crypto");
 
 const code = fs.readFileSync("js/app.js", "utf8");
 const context = {
@@ -14,10 +15,15 @@ const context = {
   console,
   URL,
   URLSearchParams,
+  TextEncoder,
+  TextDecoder,
   setTimeout,
   clearTimeout
 };
 context.window.setTimeout = (callback) => setTimeout(callback, 0);
+context.window.crypto = webcrypto;
+context.window.btoa = (value) => Buffer.from(value, "binary").toString("base64");
+context.window.atob = (value) => Buffer.from(value, "base64").toString("binary");
 
 vm.createContext(context);
 vm.runInContext(code, context);
@@ -438,6 +444,20 @@ async function runAsyncUtilityTests() {
     { lat: 26.3344, lng: 127.8056 }
   ]);
   assert.strictEqual(malformedRoute, null, "malformed OSRM routes with missing legs should be ignored instead of crashing later");
+
+  const encryptedShare = await utils.encryptShareFilePayload(savedPayload, "共有用パスワード", { iterations: 1000 });
+  assert.ok(encryptedShare.includes("\"type\":\"sougei-route-maker.encrypted\""), "share files should identify the encrypted app format");
+  assert.strictEqual(encryptedShare.includes("利用者A"), false, "encrypted share files should not expose user names as plaintext");
+  assert.strictEqual(encryptedShare.includes("那覇空港"), false, "encrypted share files should not expose place names as plaintext");
+  const decryptedShare = await utils.decryptShareFilePayload(encryptedShare, "共有用パスワード");
+  assert.strictEqual(decryptedShare.courses[0].stops[0].name, "利用者A", "encrypted share files should restore saved course data with the passphrase");
+  let wrongPassphraseRejected = false;
+  try {
+    await utils.decryptShareFilePayload(encryptedShare, "まちがい");
+  } catch (error) {
+    wrongPassphraseRejected = true;
+  }
+  assert.strictEqual(wrongPassphraseRejected, true, "encrypted share files should reject the wrong passphrase");
 
   context.window.fetch = originalFetch;
 }
