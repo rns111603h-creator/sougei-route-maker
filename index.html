@@ -52,10 +52,6 @@
           <p>住所を入れて巡回順を計算し、そのままGoogleマップと印刷用ルート表へ。</p>
         </div>
       </div>
-      <div class="mode-switch" role="group" aria-label="送迎の種類">
-        <button type="button" id="mode-pickup" class="mode-button is-active" aria-pressed="true">お迎え</button>
-        <button type="button" id="mode-dropoff" class="mode-button" aria-pressed="false">お送り</button>
-      </div>
     </header>
 
     <section class="course-panel step-panel" aria-label="送迎コースの切り替え">
@@ -142,19 +138,26 @@
           <div class="step-heading">
             <span class="step-number">3</span>
             <span>
-              <strong>利用者と休み日を入れる</strong>
-              <small>氏名、場所名、住所を入力します。休み日は必要な人だけ開いてチェックします。</small>
+              <strong>利用者と地点を入れる</strong>
+              <small>氏名、場所名、住所を入力します。送り地点が違う人だけ追加欄を開きます。</small>
             </span>
           </div>
-          <div class="section-kicker"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-people"></use></svg><span id="stops-kicker">お迎えする利用者</span></div>
+          <div class="section-kicker"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-people"></use></svg><span id="stops-kicker">送迎利用者</span></div>
           <div class="section-heading">
             <h2>送迎利用者リスト</h2>
-            <p>利用者情報、場所・住所、休み日をここでまとめて管理します。</p>
+            <p>利用者情報、通常地点、必要な人だけ送り地点をここでまとめて管理します。</p>
           </div>
           <div id="stops" class="stops-list" aria-live="polite"></div>
           <button type="button" id="add-stop" class="secondary-button"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-plus"></use></svg>利用者を追加</button>
 
           <p id="calculation-summary" class="calculation-summary">事業所住所と送迎利用者を入力したら計算できます。</p>
+          <div class="route-mode-field">
+            <span class="field-label">今回計算するルート</span>
+            <div class="mode-switch" role="group" aria-label="今回計算するルート">
+              <button type="button" id="mode-pickup" class="mode-button is-active" aria-pressed="true">迎えルート</button>
+              <button type="button" id="mode-dropoff" class="mode-button" aria-pressed="false">送りルート</button>
+            </div>
+          </div>
           <button type="button" id="calculate-route" class="primary-button">
             <svg class="icon" width="22" height="22" aria-hidden="true"><use href="#icon-route"></use></svg>
             <span id="calculate-label">入力内容を確認してルートを計算</span>

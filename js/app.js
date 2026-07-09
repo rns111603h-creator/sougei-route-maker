@@ -65,12 +65,14 @@
     return course;
   }
 
-  function createStop(course, name = "", place = "", address = "", restDays = []) {
+  function createStop(course, name = "", place = "", address = "", restDays = [], dropoffPlace = "", dropoffAddress = "") {
     const stop = {
       id: `${course.id}-stop-${course.nextId}`,
       name,
       place,
       address,
+      dropoffPlace,
+      dropoffAddress,
       restDays: normalizeRestDays(restDays),
       restDates: convertRestDaysToDates(restDays, course),
       lat: null,
@@ -92,6 +94,32 @@
 
   function getStopAddressLabel(stop) {
     return String(stop.address || stop.displayName || stop.place || "").trim();
+  }
+
+  function getRouteStopForMode(stop, mode = state.mode) {
+    const routeMode = mode === "dropoff" ? "dropoff" : "pickup";
+    const primaryPlace = String(stop.place || "").trim();
+    const primaryAddress = String(stop.address || "").trim();
+    const dropoffPlace = String(stop.dropoffPlace || "").trim();
+    const dropoffAddress = String(stop.dropoffAddress || "").trim();
+    if (routeMode !== "dropoff" || (!dropoffPlace && !dropoffAddress)) {
+      return {
+        ...stop,
+        routeMode: "pickup",
+        place: primaryPlace,
+        address: primaryAddress,
+        originalPlace: primaryPlace,
+        originalAddress: primaryAddress
+      };
+    }
+    return {
+      ...stop,
+      routeMode: "dropoff",
+      place: dropoffPlace || primaryPlace,
+      address: dropoffAddress || primaryAddress,
+      originalPlace: primaryPlace,
+      originalAddress: primaryAddress
+    };
   }
 
   function getRoutePrimaryName(stop) {
@@ -206,7 +234,12 @@
   }
 
   function getPrintPlaceName(stop) {
-    return String(stop.place || "").trim();
+    const pickupPlace = String(stop.originalPlace || stop.place || "").trim();
+    const dropoffPlace = String(stop.dropoffPlace || "").trim();
+    if (dropoffPlace && dropoffPlace !== pickupPlace) {
+      return `迎：${pickupPlace || "未入力"} / 送：${dropoffPlace}`;
+    }
+    return pickupPlace;
   }
 
   function getTargetDay(course) {
@@ -223,17 +256,19 @@
     return isValidDateKey(date) ? date : "";
   }
 
-  function getCalculationStops(course) {
+  function getCalculationStops(course, mode = state.mode) {
     const sourceCourse = course || {};
     return (Array.isArray(sourceCourse.stops) ? sourceCourse.stops : [])
-      .map((stop) => ({
+      .map((stop) => getRouteStopForMode({
         ...stop,
         name: String(stop.name || "").trim(),
         place: String(stop.place || "").trim(),
         address: String(stop.address || "").trim(),
+        dropoffPlace: String(stop.dropoffPlace || "").trim(),
+        dropoffAddress: String(stop.dropoffAddress || "").trim(),
         restDays: normalizeRestDays(stop.restDays),
         restDates: getStopRestDates(stop, sourceCourse)
-      }))
+      }, mode))
       .filter((stop) => buildStopSearchQueries(stop).length > 0);
   }
 
@@ -278,6 +313,8 @@
           name: String(stop.name || "").trim(),
           place: String(stop.place || "").trim(),
           address: String(stop.address || "").trim(),
+          dropoffPlace: String(stop.dropoffPlace || "").trim(),
+          dropoffAddress: String(stop.dropoffAddress || "").trim(),
           restDays: getStopRestDates(stop, course)
             .filter((dateKey) => {
               const date = parseDateKey(dateKey);
@@ -326,7 +363,9 @@
             String(storedStop.name || "").trim(),
             String(storedStop.place || "").trim(),
             String(storedStop.address || "").trim(),
-            normalizeRestDays(storedStop.restDays)
+            normalizeRestDays(storedStop.restDays),
+            String(storedStop.dropoffPlace || "").trim(),
+            String(storedStop.dropoffAddress || "").trim()
           );
           stop.restDates = normalizeRestDates(storedStop.restDates);
           if (stop.restDates.length === 0) {
@@ -1293,17 +1332,22 @@
   }
 
   function setMode(mode) {
-    state.mode = mode;
-    elements.modePickup.classList.toggle("is-active", mode === "pickup");
-    elements.modeDropoff.classList.toggle("is-active", mode === "dropoff");
-    elements.modePickup.setAttribute("aria-pressed", String(mode === "pickup"));
-    elements.modeDropoff.setAttribute("aria-pressed", String(mode === "dropoff"));
-    elements.stopsKicker.textContent = mode === "pickup" ? "お迎えする利用者" : "お送りする利用者";
-    const course = getActiveCourse();
-    if (course.lastRoute) {
-      renderPrintSheet(course.lastRoute.facilityAddress, course.lastRoute.ordered, course.lastRoute.returnToStart, course.lastRoute.schedule || []);
-      elements.resultTitle.textContent = buildResultTitle(course);
+    const nextMode = mode === "dropoff" ? "dropoff" : "pickup";
+    if (state.mode === nextMode) {
+      return;
     }
+    const course = getActiveCourse();
+    const hadRoute = Boolean(course && course.lastRoute);
+    if (hadRoute) {
+      invalidateActiveRoute("計算するルートを変更しました。もう一度ルートを計算してください。");
+    }
+    state.mode = nextMode;
+    elements.modePickup.classList.toggle("is-active", nextMode === "pickup");
+    elements.modeDropoff.classList.toggle("is-active", nextMode === "dropoff");
+    elements.modePickup.setAttribute("aria-pressed", String(nextMode === "pickup"));
+    elements.modeDropoff.setAttribute("aria-pressed", String(nextMode === "dropoff"));
+    elements.stopsKicker.textContent = "送迎利用者";
+    updateCalculationSummary();
   }
 
   function setPrintRange(range) {
@@ -1447,6 +1491,13 @@
         <input class="stop-place" type="text" value="${escapeHtml(stop.place)}" placeholder="場所名・施設名" aria-label="${index + 1}番目の場所名または施設名">
         <input class="stop-address" type="text" value="${escapeHtml(stop.address)}" placeholder="住所（市町村から）" aria-label="${index + 1}番目の住所">
         <button class="delete-stop" type="button" aria-label="${index + 1}番目の立ち寄り先を削除">×</button>
+        <details class="dropoff-location"${String(stop.dropoffPlace || stop.dropoffAddress).trim() ? " open" : ""}>
+          <summary>送り地点が違う場合だけ入力</summary>
+          <div class="dropoff-location-grid">
+            <input class="stop-dropoff-place" type="text" value="${escapeHtml(stop.dropoffPlace || "")}" placeholder="送りの場所名・施設名" aria-label="${index + 1}番目の送り場所名または施設名">
+            <input class="stop-dropoff-address" type="text" value="${escapeHtml(stop.dropoffAddress || "")}" placeholder="送りの住所（空欄なら通常住所）" aria-label="${index + 1}番目の送り住所">
+          </div>
+        </details>
         <details class="rest-days">
           <summary>${escapeHtml(buildRestSummary(stop, course))}</summary>
           <div class="rest-day-grid" role="group" aria-label="${index + 1}番目の休み日">
@@ -1471,6 +1522,18 @@
         clearRowError(row);
         updateCalculationSummary();
         invalidateActiveRoute("住所を変更しました。もう一度ルートを計算してください。");
+      });
+      row.querySelector(".stop-dropoff-place").addEventListener("input", (event) => {
+        stop.dropoffPlace = event.target.value;
+        clearRowError(row);
+        updateCalculationSummary();
+        invalidateActiveRoute("送りの場所名を変更しました。もう一度ルートを計算してください。");
+      });
+      row.querySelector(".stop-dropoff-address").addEventListener("input", (event) => {
+        stop.dropoffAddress = event.target.value;
+        clearRowError(row);
+        updateCalculationSummary();
+        invalidateActiveRoute("送りの住所を変更しました。もう一度ルートを計算してください。");
       });
       row.querySelectorAll(".rest-day-checkbox").forEach((checkbox) => {
         checkbox.addEventListener("change", () => {
@@ -1719,7 +1782,7 @@
     const manualArrivalTimes = {};
     const schedule = roadRoute ? buildArrivalSchedule(departureTime, roadRoute.legs, stopMinutes, manualArrivalTimes, ordered) : [];
     const course = getActiveCourse();
-    course.lastRoute = { facility, facilityAddress, ordered, returnToStart, failedStops, roadRoute, schedule, manualArrivalTimes, departureTime, stopMinutes, optimizationMode };
+    course.lastRoute = { facility, facilityAddress, ordered, returnToStart, failedStops, roadRoute, schedule, manualArrivalTimes, departureTime, stopMinutes, optimizationMode, routeMode: state.mode };
     course.stops = sortStopsByRouteOrder(course.stops, ordered);
     renderStops();
     (failedStops || []).forEach((stop) => markAddressError(stop.id));
@@ -2144,13 +2207,14 @@
       ordered,
       returnToStart,
       schedule,
-      departureTime: activeCourse.lastRoute && activeCourse.lastRoute.departureTime
+      departureTime: activeCourse.lastRoute && activeCourse.lastRoute.departureTime,
+      routeMode: activeCourse.lastRoute && activeCourse.lastRoute.routeMode
     };
     const printableCourses = getPrintableCourseEntries(state, activeRoute);
 
     const coursesToPrint = printableCourses.length > 0
       ? printableCourses
-      : [{ course: activeCourse, route: { facilityAddress, ordered, returnToStart, schedule } }];
+      : [{ course: activeCourse, route: { facilityAddress, ordered, returnToStart, schedule, routeMode: state.mode } }];
 
     elements.printSheet.innerHTML = coursesToPrint
       .map(({ course, route }) => buildPrintCoursePages(course, route))
@@ -2242,6 +2306,7 @@
     const weekLabel = formatPrintWeekRange(printDays, course);
     const isCalculated = hasCalculatedPrintRoute(route);
     const statusLabel = isCalculated ? "" : "<span class=\"print-status-label\">未計算・入力順</span>";
+    const printMode = route && route.routeMode === "dropoff" ? "お送り" : "お迎え";
     const note = isCalculated
       ? "枠内は送迎利用チェック欄です。休み予定は「休」、祝日は灰色で表示します。順番と時刻は高速道路を避けた道路ルートをもとにした目安です。"
       : "枠内は送迎利用チェック欄です。休み予定は「休」、祝日は灰色で表示します。このコースは未計算のため、利用者は入力順で表示し、時刻は空欄です。";
@@ -2251,7 +2316,7 @@
         <div class="print-driver-row">
           <span>送迎者</span>
           <span class="print-driver-line"></span>
-          <span class="print-mode">${escapeHtml(state.mode === "pickup" ? "お迎え" : "お送り")}</span>
+          <span class="print-mode">${escapeHtml(printMode)}</span>
           <span>出発</span>
           <span class="print-start-time">${escapeHtml(startTime || " ")}</span>
         </div>
@@ -2601,6 +2666,7 @@
     formatDistanceMeters,
     createInitialCourses,
     buildStopSearchQueries,
+    getRouteStopForMode,
     getStopDisplayName,
     getRoutePrimaryName,
     getRouteDetailLines,

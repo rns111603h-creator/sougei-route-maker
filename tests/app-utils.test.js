@@ -328,6 +328,8 @@ courses[0].targetDate = "2026-04-03";
 courses[0].stops[0].name = "利用者A";
 courses[0].stops[0].place = "那覇空港";
 courses[0].stops[0].address = "沖縄県那覇市鏡水150";
+courses[0].stops[0].dropoffPlace = "那覇空港 国内線出入口";
+courses[0].stops[0].dropoffAddress = "沖縄県那覇市鏡水150-1";
 courses[0].stops[0].restDays = [3, 10];
 courses[0].stops[0].restDates = ["2026-04-03", "2026-04-10", "2026-05-01"];
 courses[0].lastRoute = { shouldNotBeSaved: true };
@@ -339,6 +341,8 @@ assert.strictEqual(savedPayload.courses[0].targetMonth, "2026-04");
 assert.strictEqual(savedPayload.courses[0].targetDate, "2026-04-03");
 assert.strictEqual(savedPayload.courses[0].stops[0].service, undefined);
 assert.strictEqual(savedPayload.courses[0].stops[0].place, "那覇空港");
+assert.strictEqual(savedPayload.courses[0].stops[0].dropoffPlace, "那覇空港 国内線出入口");
+assert.strictEqual(savedPayload.courses[0].stops[0].dropoffAddress, "沖縄県那覇市鏡水150-1");
 assert.strictEqual(savedPayload.courses[0].stops[0].scheduledTime, undefined);
 assert.strictEqual(JSON.stringify(savedPayload.courses[0].stops[0].restDays), JSON.stringify([3, 10]));
 assert.strictEqual(JSON.stringify(savedPayload.courses[0].stops[0].restDates), JSON.stringify(["2026-04-03", "2026-04-10", "2026-05-01"]));
@@ -354,10 +358,16 @@ assert.strictEqual(restoredCourses[0].stops[0].name, "利用者A");
 assert.strictEqual(restoredCourses[0].stops[0].service, undefined);
 assert.strictEqual(restoredCourses[0].stops[0].place, "那覇空港");
 assert.strictEqual(restoredCourses[0].stops[0].address, "沖縄県那覇市鏡水150");
+assert.strictEqual(restoredCourses[0].stops[0].dropoffPlace, "那覇空港 国内線出入口");
+assert.strictEqual(restoredCourses[0].stops[0].dropoffAddress, "沖縄県那覇市鏡水150-1");
 assert.strictEqual(restoredCourses[0].stops[0].scheduledTime, undefined);
 assert.strictEqual(JSON.stringify(restoredCourses[0].stops[0].restDays), JSON.stringify([3, 10]));
 assert.strictEqual(JSON.stringify(restoredCourses[0].stops[0].restDates), JSON.stringify(["2026-04-03", "2026-04-10", "2026-05-01"]));
 assert.strictEqual(restoredCourses[0].lastRoute, null);
+assert.strictEqual(utils.getRouteStopForMode(restoredCourses[0].stops[0], "pickup").place, "那覇空港", "pickup routes should use the primary place");
+assert.strictEqual(utils.getRouteStopForMode(restoredCourses[0].stops[0], "dropoff").place, "那覇空港 国内線出入口", "dropoff routes should use the dropoff place when provided");
+assert.strictEqual(utils.getRouteStopForMode(restoredCourses[0].stops[0], "dropoff").address, "沖縄県那覇市鏡水150-1", "dropoff routes should use the dropoff address when provided");
+assert.strictEqual(utils.getPrintPlaceName(restoredCourses[0].stops[0]), "迎：那覇空港 / 送：那覇空港 国内線出入口", "print sheets should show both pickup and dropoff places only when they differ");
 
 const legacyRestoredCourses = utils.hydrateCoursesFromStorage({
   version: 1,

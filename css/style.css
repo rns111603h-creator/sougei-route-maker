@@ -93,7 +93,7 @@ button {
 
 .app-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: center;
   margin-bottom: 16px;
@@ -149,16 +149,17 @@ h1 {
   grid-template-columns: 1fr 1fr;
   gap: 0;
   padding: 0;
-  border: 0;
-  background: transparent;
+  border: 1px solid var(--line-strong);
+  background: #fff;
 }
 
 .mode-button {
-  border: 1px solid #4a4a4a;
+  border: 0;
+  border-right: 1px solid var(--line-strong);
   border-radius: 0;
   min-height: 42px;
   padding: 8px 22px;
-  color: #c9c9c9;
+  color: var(--muted);
   background: transparent;
   font-size: 0.86rem;
   font-weight: 500;
@@ -166,15 +167,18 @@ h1 {
   cursor: pointer;
 }
 
+.mode-button:last-child {
+  border-right: 0;
+}
+
 .mode-button:hover {
-  color: #fff;
-  border-color: #777;
+  color: var(--ink);
+  background: var(--surface-soft);
 }
 
 .mode-button.is-active {
-  color: var(--ink-band);
-  border-color: #fff;
-  background: #fff;
+  color: #fff;
+  background: var(--ink);
   font-weight: 700;
 }
 
@@ -530,6 +534,12 @@ input[type="number"]:focus {
   accent-color: var(--ink);
 }
 
+.route-mode-field {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 10px;
+}
+
 /* ---------- Stops ---------- */
 
 .stops-list {
@@ -563,6 +573,29 @@ input[type="number"]:focus {
 .stop-row.is-error input[type="text"] {
   border-bottom-color: var(--red);
   background: var(--red-soft);
+}
+
+.dropoff-location {
+  grid-column: 2 / -1;
+  padding: 8px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 0;
+  background: #fff;
+}
+
+.dropoff-location summary {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.dropoff-location-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .rest-days {
@@ -1264,13 +1297,14 @@ input[type="number"]:focus {
       "number name delete"
       "number place place"
       "number address address"
+      ". dropoff dropoff"
       ". rest rest"
       ". error error";
   }
 
   .stop-number {
     grid-area: number;
-    height: 153px;
+    height: 205px;
   }
 
   .stop-name {
@@ -1283,6 +1317,14 @@ input[type="number"]:focus {
 
   .stop-address {
     grid-area: address;
+  }
+
+  .dropoff-location {
+    grid-area: dropoff;
+  }
+
+  .dropoff-location-grid {
+    grid-template-columns: 1fr;
   }
 
   .rest-days {
