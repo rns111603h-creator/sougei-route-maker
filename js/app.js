@@ -144,6 +144,20 @@
     stop.manualLng = null;
   }
 
+  function buildManualPinFallbackStop(stop, fallbackPoint) {
+    const lat = normalizeCoordinate(fallbackPoint && fallbackPoint.lat);
+    const lng = normalizeCoordinate(fallbackPoint && fallbackPoint.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return null;
+    }
+    return {
+      ...stop,
+      lat,
+      lng,
+      isManualPinFallback: true
+    };
+  }
+
   function getRouteStopForMode(stop, mode = state.mode) {
     const routeMode = mode === "dropoff" ? "dropoff" : "pickup";
     const primaryPlace = String(stop.place || "").trim();
@@ -914,7 +928,7 @@
   function buildGoogleMapsUrl(facility, ordered, returnToStart) {
     const coord = (point) => `${point.lat.toFixed(6)},${point.lng.toFixed(6)}`;
     const origin = coord(facility);
-    const destination = returnToStart ? coord(facility) : coord(ordered[ordered.length - 1]);
+    const destination = returnToStart || ordered.length === 0 ? coord(facility) : coord(ordered[ordered.length - 1]);
     const waypoints = returnToStart ? ordered : ordered.slice(0, -1);
     const params = new URLSearchParams({
       api: "1",
@@ -1813,32 +1827,33 @@
         }
       }
 
-      if (foundStops.length === 0) {
-        showFormMessage("Step 3：利用者の場所名・住所が1件も見つかりませんでした。赤色の行を修正してください。");
-        return;
-      }
-
       const returnToStart = elements.returnToStart.checked;
       let durationMatrix = null;
       let ordered = null;
       let optimizationMode = "duration";
-      try {
-        setProgressText("道路時間を比較しています...");
-        durationMatrix = await fetchDurationMatrix([facility, ...foundStops]);
-        ordered = optimizeRouteByDurationMatrix(durationMatrix, foundStops, returnToStart);
-      } catch (error) {
-        optimizationMode = "straight-line";
-        ordered = optimizeRoute(facility, foundStops, returnToStart);
-      }
-      setProgressText("道路ルートと走行時間を調べています...");
-      const pathPoints = buildRoutePath(facility, ordered, returnToStart);
       let roadRoute = null;
-      try {
-        roadRoute = await fetchRoadRoute(pathPoints);
-      } catch (error) {
-        roadRoute = null;
+      if (foundStops.length === 0) {
+        showFormMessage("Step 3：利用者の場所名・住所が1件も見つかりませんでした。赤色の行を修正するか、下の一覧から地図で位置を指定してください。");
+        ordered = [];
+        optimizationMode = "manual-needed";
+      } else {
+        try {
+          setProgressText("道路時間を比較しています...");
+          durationMatrix = await fetchDurationMatrix([facility, ...foundStops]);
+          ordered = optimizeRouteByDurationMatrix(durationMatrix, foundStops, returnToStart);
+        } catch (error) {
+          optimizationMode = "straight-line";
+          ordered = optimizeRoute(facility, foundStops, returnToStart);
+        }
+        setProgressText("道路ルートと走行時間を調べています...");
+        const pathPoints = buildRoutePath(facility, ordered, returnToStart);
+        try {
+          roadRoute = await fetchRoadRoute(pathPoints);
+        } catch (error) {
+          roadRoute = null;
+        }
+        roadRoute = ensureRouteTiming(facility, ordered, returnToStart, roadRoute, durationMatrix);
       }
-      roadRoute = ensureRouteTiming(facility, ordered, returnToStart, roadRoute, durationMatrix);
       renderResult(facility, facilityLabel, ordered, returnToStart, failedStops, roadRoute, optimizationMode);
     } catch (error) {
       showFormMessage("ルートを計算できませんでした。通信環境を確認して、もう一度お試しください。");
@@ -1948,7 +1963,7 @@
 
     renderRouteList(route);
     renderSchedule(route, route.departureTime || elements.departureTime.value, Number.isFinite(route.stopMinutes) ? route.stopMinutes : Number.parseInt(elements.stopMinutes.value, 10) || 0);
-    renderFailedAddresses(route.failedStops || []);
+    renderFailedAddresses(route.failedStops || [], route);
     renderGoogleMapLink(route.facility, route.ordered, route.returnToStart);
     renderMap(route.facility, route.ordered, route.returnToStart, route.roadRoute);
     renderPrintSheet(route.facilityAddress, route.ordered, route.returnToStart, route.schedule);
@@ -1998,6 +2013,10 @@
     }
     if (optimizationMode === "manual") {
       elements.distanceNote.textContent = `${approximationNote} 手動で変更した順番で、高速道路を避けた道路距離・走行時間を再計算しています。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。`.trim();
+      return;
+    }
+    if (optimizationMode === "manual-needed") {
+      elements.distanceNote.textContent = "見つからなかった利用者は、下の一覧から地図上で位置を指定できます。手動ピンを保存すると、次回の計算ではその座標を使います。";
       return;
     }
     elements.distanceNote.textContent = `${approximationNote} 順番・道路距離・走行時間は${avoidNote} 渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
@@ -2140,10 +2159,28 @@
     if (!route || !Array.isArray(route.ordered) || !route.ordered[routeIndex] || !state.map) {
       return;
     }
-    const stop = route.ordered[routeIndex];
+    startManualPinEditForStop(route, route.ordered[routeIndex]);
+  }
+
+  function startFailedStopManualPinEdit(route, stopId) {
+    if (!route || !Array.isArray(route.failedStops) || !state.map) {
+      return;
+    }
+    const stop = route.failedStops.find((candidate) => candidate.id === stopId);
+    const fallbackPoint = route.facility || (state.map.getCenter ? state.map.getCenter() : null);
+    const editableStop = buildManualPinFallbackStop(stop, fallbackPoint);
+    if (!editableStop) {
+      return;
+    }
+    startManualPinEditForStop(route, editableStop);
+  }
+
+  function startManualPinEditForStop(route, stop) {
+    if (!route || !stop || !state.map) {
+      return;
+    }
     state.pinEdit = {
       route,
-      routeIndex,
       stopId: stop.id,
       mode: route.routeMode === "dropoff" ? "dropoff" : "pickup",
       label: getRoutePrimaryName(stop),
@@ -2396,17 +2433,37 @@
     });
   }
 
-  function renderFailedAddresses(failedStops) {
+  function renderFailedAddresses(failedStops, route) {
     if (failedStops.length === 0) {
       elements.failedAddresses.textContent = "";
       elements.failedAddresses.classList.remove("is-visible");
       return;
     }
 
-    elements.failedAddresses.innerHTML = `<strong>${failedStops.length}件の住所が見つかりませんでした。</strong> 市町村名を含める、施設名にする、または丁目までの住所に直して、もう一度計算してください。<br>${failedStops
-      .map((stop) => `・${escapeHtml(getStopDisplayName(stop))}：${escapeHtml(buildStopSearchQueries(stop).join(" / "))}`)
-      .join("<br>")}`;
+    elements.failedAddresses.innerHTML = `
+      <strong>${failedStops.length}件の住所が見つかりませんでした。</strong>
+      市町村名を含める、施設名にする、または下のボタンから地図上で位置を指定してください。
+      <ul class="failed-address-list">
+        ${failedStops.map((stop) => `
+          <li>
+            <span>
+              <b>${escapeHtml(getStopDisplayName(stop))}</b>
+              <small>${escapeHtml(buildStopSearchQueries(stop).join(" / "))}</small>
+            </span>
+            <button type="button" class="failed-pin-button" data-stop-id="${escapeHtml(stop.id)}" aria-label="${escapeHtml(getStopDisplayName(stop))}を地図で位置指定">
+              <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-pin"></use></svg>
+              地図で位置指定
+            </button>
+          </li>
+        `).join("")}
+      </ul>
+    `;
     elements.failedAddresses.classList.add("is-visible");
+    elements.failedAddresses.querySelectorAll(".failed-pin-button").forEach((button) => {
+      button.addEventListener("click", () => {
+        startFailedStopManualPinEdit(route, button.dataset.stopId);
+      });
+    });
   }
 
   function renderGoogleMapLink(facility, ordered, returnToStart) {
@@ -2966,6 +3023,7 @@
     getManualPinForMode,
     setManualPinForMode,
     clearManualPinForMode,
+    buildManualPinFallbackStop,
     getStopDisplayName,
     getRoutePrimaryName,
     getRouteDetailLines,

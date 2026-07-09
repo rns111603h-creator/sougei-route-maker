@@ -792,6 +792,59 @@ input[type="number"]:focus {
   display: block;
 }
 
+.failed-address-list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.failed-address-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(185, 28, 28, 0.16);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.failed-address-list b,
+.failed-address-list small {
+  display: block;
+}
+
+.failed-address-list small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.failed-pin-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 7px 10px;
+  border: 1px solid var(--red);
+  border-radius: 0;
+  color: var(--red-dark);
+  background: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.failed-pin-button:hover,
+.failed-pin-button:focus-visible {
+  color: #fff;
+  background: var(--red);
+}
+
 /* ---------- Placeholder ---------- */
 
 .placeholder ol {
@@ -1411,6 +1464,15 @@ input[type="number"]:focus {
 
   .stop-error {
     grid-area: error;
+  }
+
+  .failed-address-list li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .failed-pin-button {
+    width: 100%;
   }
 
   .summary-grid,

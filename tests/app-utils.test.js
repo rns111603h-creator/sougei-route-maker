@@ -231,6 +231,17 @@ assert.strictEqual(
   JSON.stringify(["a", "b"]),
   "calculation should keep resting users in the route because rest marks are for the monthly print sheet"
 );
+const failedFallbackStop = utils.buildManualPinFallbackStop(
+  { id: "missing", name: "検索失敗", place: "未登録施設", address: "沖縄県宜野湾市長田" },
+  { lat: 26.265, lng: 127.778 }
+);
+assert.strictEqual(failedFallbackStop.id, "missing", "failed manual pin fallback should keep the original stop id");
+assert.strictEqual(failedFallbackStop.name, "検索失敗", "failed manual pin fallback should keep the user name");
+assert.strictEqual(failedFallbackStop.place, "未登録施設", "failed manual pin fallback should keep the place name");
+assert.strictEqual(failedFallbackStop.address, "沖縄県宜野湾市長田", "failed manual pin fallback should keep the address");
+assert.strictEqual(failedFallbackStop.lat, 26.265, "failed stops should start manual pin editing from the facility latitude");
+assert.strictEqual(failedFallbackStop.lng, 127.778, "failed stops should start manual pin editing from the facility longitude");
+assert.strictEqual(failedFallbackStop.isManualPinFallback, true, "failed stops should be marked as manual pin fallback edits");
 assert.strictEqual(
   JSON.stringify(utils.moveItemInList(unsortedStops, 2, 0).map((stop) => stop.id)),
   JSON.stringify(["c", "a", "b", "d"]),
