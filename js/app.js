@@ -860,28 +860,34 @@
     return `https://www.google.com/maps/dir/?${params.toString()}`;
   }
 
-  function buildOsrmRouteUrl(points) {
+  function buildOsrmRouteUrl(points, options = {}) {
     const coordinates = points
       .map((point) => `${point.lng.toFixed(6)},${point.lat.toFixed(6)}`)
       .join(";");
+    const avoidMotorway = options.avoidMotorway !== false;
     const params = new URLSearchParams({
       overview: "full",
       geometries: "geojson",
       steps: "false",
-      annotations: "duration,distance",
-      exclude: OSRM_AVOID_CLASSES
+      annotations: "duration,distance"
     });
+    if (avoidMotorway) {
+      params.set("exclude", OSRM_AVOID_CLASSES);
+    }
     return `${OSRM_ROUTE_ENDPOINT}/${coordinates}?${params.toString()}`;
   }
 
-  function buildOsrmTableUrl(points) {
+  function buildOsrmTableUrl(points, options = {}) {
     const coordinates = points
       .map((point) => `${point.lng.toFixed(6)},${point.lat.toFixed(6)}`)
       .join(";");
+    const avoidMotorway = options.avoidMotorway !== false;
     const params = new URLSearchParams({
-      annotations: "duration",
-      exclude: OSRM_AVOID_CLASSES
+      annotations: "duration"
     });
+    if (avoidMotorway) {
+      params.set("exclude", OSRM_AVOID_CLASSES);
+    }
     return `${OSRM_TABLE_ENDPOINT}/${coordinates}?${params.toString()}`;
   }
 
@@ -889,13 +895,32 @@
     if (points.length < 2) {
       return null;
     }
-    const response = await window.fetch(buildOsrmTableUrl(points), {
+    try {
+      return await fetchDurationMatrixOnce(points, true);
+    } catch (error) {
+      if (error && error.message === "osrm_exclude_unsupported") {
+        return fetchDurationMatrixOnce(points, false);
+      }
+      throw error;
+    }
+  }
+
+  async function fetchDurationMatrixOnce(points, avoidMotorway) {
+    const response = await window.fetch(buildOsrmTableUrl(points, { avoidMotorway }), {
       headers: { "Accept": "application/json" }
     });
+    let data = null;
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = null;
+    }
+    if (isOsrmExcludeUnsupported(data)) {
+      throw new Error("osrm_exclude_unsupported");
+    }
     if (!response.ok) {
       throw new Error("osrm_table_network_error");
     }
-    const data = await response.json();
     if (!Array.isArray(data.durations) || data.durations.length !== points.length) {
       throw new Error("osrm_table_invalid_response");
     }
@@ -909,6 +934,7 @@
         }
       });
     });
+    data.durations.avoidHighwaysUnsupported = !avoidMotorway;
     return data.durations;
   }
 
@@ -916,13 +942,32 @@
     if (points.length < 2) {
       return null;
     }
-    const response = await window.fetch(buildOsrmRouteUrl(points), {
+    try {
+      return await fetchRoadRouteOnce(points, true);
+    } catch (error) {
+      if (error && error.message === "osrm_exclude_unsupported") {
+        return fetchRoadRouteOnce(points, false);
+      }
+      throw error;
+    }
+  }
+
+  async function fetchRoadRouteOnce(points, avoidMotorway) {
+    const response = await window.fetch(buildOsrmRouteUrl(points, { avoidMotorway }), {
       headers: { "Accept": "application/json" }
     });
+    let data = null;
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = null;
+    }
+    if (isOsrmExcludeUnsupported(data)) {
+      throw new Error("osrm_exclude_unsupported");
+    }
     if (!response.ok) {
       throw new Error("osrm_network_error");
     }
-    const data = await response.json();
     if (!data.routes || !data.routes.length) {
       return null;
     }
@@ -937,8 +982,15 @@
         distanceMeters: leg.distance,
         durationSeconds: leg.duration
       })),
-      geometry: route.geometry
+      geometry: route.geometry,
+      avoidHighwaysUnsupported: !avoidMotorway
     };
+  }
+
+  function isOsrmExcludeUnsupported(data) {
+    return Boolean(data
+      && data.code === "InvalidValue"
+      && String(data.message || "").includes("Exclude flag combination is not supported"));
   }
 
   function buildArrivalSchedule(departureTime, legs, stopMinutes, manualArrivalTimes = {}, ordered = []) {
@@ -1022,8 +1074,16 @@
       legs,
       geometry: null,
       isDurationMatrixEstimate: true,
+      avoidHighwaysUnsupported: Boolean(durationMatrix.avoidHighwaysUnsupported),
       straightLineDistanceKm: routeDistance(facility, ordered, returnToStart)
     };
+  }
+
+  function ensureRouteTiming(facility, ordered, returnToStart, roadRoute, durationMatrix) {
+    if (roadRoute) {
+      return roadRoute;
+    }
+    return durationMatrix ? buildDurationEstimateRoute(facility, ordered, returnToStart, durationMatrix) : null;
   }
 
   function init() {
@@ -1694,8 +1754,9 @@
       try {
         roadRoute = await fetchRoadRoute(pathPoints);
       } catch (error) {
-        roadRoute = durationMatrix ? buildDurationEstimateRoute(facility, ordered, returnToStart, durationMatrix) : null;
+        roadRoute = null;
       }
+      roadRoute = ensureRouteTiming(facility, ordered, returnToStart, roadRoute, durationMatrix);
       renderResult(facility, facilityLabel, ordered, returnToStart, failedStops, roadRoute, optimizationMode);
     } catch (error) {
       showFormMessage("ルートを計算できませんでした。通信環境を確認して、もう一度お試しください。");
@@ -1841,20 +1902,22 @@
     const approximationNote = points.some((point) => point.isApproximate)
       ? "一部の住所は番地まで見つからなかったため、丁目などの代表地点で表示しています。Googleマップや現場判断で位置を確認してください。"
       : "";
-    const avoidNote = "高速道路を避けた道路時間をもとにした目安です。";
+    const avoidNote = roadRoute && roadRoute.avoidHighwaysUnsupported
+      ? "OSRMの高速道路除外指定が未対応だったため、通常の道路時間をもとにした目安です。Googleマップは高速道路・有料道路を避ける設定で開きます。"
+      : "高速道路を避けた道路時間をもとにした目安です。";
     if (optimizationMode === "straight-line") {
       elements.distanceNote.textContent = `${approximationNote} OSRMの道路時間を取得できなかったため、直線距離を使って順番を計算しています。実際の走行時間は高速道路・有料道路を避ける設定のGoogleマップや現場判断で確認してください。`.trim();
       return;
     }
     if (roadRoute && roadRoute.isDurationMatrixEstimate) {
-      elements.distanceNote.textContent = `${approximationNote} 順番と走行時間は${avoidNote} 地図線と距離は直線ベースの表示です。Googleマップは高速道路・有料道路を避ける設定で開きます。渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
+      elements.distanceNote.textContent = `${approximationNote} 順番と走行時間は${avoidNote} 地図線と距離は直線ベースの表示です。渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
       return;
     }
     if (optimizationMode === "manual") {
       elements.distanceNote.textContent = `${approximationNote} 手動で変更した順番で、高速道路を避けた道路距離・走行時間を再計算しています。渋滞、信号待ち、乗降介助時間はGoogleマップや現場判断で確認してください。`.trim();
       return;
     }
-    elements.distanceNote.textContent = `${approximationNote} 順番・道路距離・走行時間は${avoidNote} Googleマップは高速道路・有料道路を避ける設定で開きます。渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
+    elements.distanceNote.textContent = `${approximationNote} 順番・道路距離・走行時間は${avoidNote} 渋滞、信号待ち、乗降介助時間は反映されません。`.trim();
   }
 
   function renderRouteList(route) {
@@ -2660,8 +2723,10 @@
     buildGoogleMapsUrl,
     buildOsrmRouteUrl,
     buildOsrmTableUrl,
+    fetchDurationMatrix,
     optimizeRouteByDurationMatrix,
     buildArrivalSchedule,
+    ensureRouteTiming,
     formatDuration,
     formatDistanceMeters,
     createInitialCourses,

@@ -455,6 +455,51 @@ async function runAsyncUtilityTests() {
   ]);
   assert.strictEqual(malformedRoute, null, "malformed OSRM routes with missing legs should be ignored instead of crashing later");
 
+  const osrmFallbackCalls = [];
+  context.window.fetch = async (url) => {
+    osrmFallbackCalls.push(url);
+    if (osrmFallbackCalls.length === 1) {
+      return {
+        ok: false,
+        json: async () => ({ code: "InvalidValue", message: "Exclude flag combination is not supported." })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        durations: [
+          [0, 180],
+          [180, 0]
+        ]
+      })
+    };
+  };
+  const fallbackMatrix = await utils.fetchDurationMatrix([
+    { lat: 26.2124, lng: 127.6809 },
+    { lat: 26.3344, lng: 127.8056 }
+  ]);
+  assert.strictEqual(osrmFallbackCalls[0].includes("exclude=motorway"), true, "OSRM duration lookup should try the motorway exclusion first");
+  assert.strictEqual(osrmFallbackCalls[1].includes("exclude=motorway"), false, "OSRM duration lookup should retry without unsupported motorway exclusion");
+  assert.strictEqual(fallbackMatrix[0][1], 180, "OSRM fallback should still return duration matrix values");
+  assert.strictEqual(fallbackMatrix.avoidHighwaysUnsupported, true, "duration matrix fallback should mark that motorway exclusion was unavailable");
+
+  const fallbackRoute = utils.ensureRouteTiming(
+    { lat: 26.2124, lng: 127.6809 },
+    [
+      { id: "a", lat: 26.2200, lng: 127.7000, matrixIndex: 1 },
+      { id: "b", lat: 26.2300, lng: 127.7100, matrixIndex: 2 }
+    ],
+    true,
+    null,
+    [
+      [0, 300, 600],
+      [300, 0, 240],
+      [600, 240, 0]
+    ]
+  );
+  assert.strictEqual(fallbackRoute.isDurationMatrixEstimate, true, "missing route geometry should fall back to the duration matrix estimate");
+  assert.strictEqual(fallbackRoute.durationSeconds, 1140, "duration matrix fallback should preserve timing totals for schedules");
+
   const encryptedShare = await utils.encryptShareFilePayload(savedPayload, "共有用パスワード", { iterations: 1000 });
   assert.ok(encryptedShare.includes("\"type\":\"sougei-route-maker.encrypted\""), "share files should identify the encrypted app format");
   assert.strictEqual(encryptedShare.includes("利用者A"), false, "encrypted share files should not expose user names as plaintext");
