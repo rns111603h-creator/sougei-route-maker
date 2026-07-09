@@ -23,6 +23,10 @@
     courses: createInitialCourses(),
     map: null,
     layer: null,
+    pinEditLayer: null,
+    pinEdit: null,
+    pinEditMarker: null,
+    mapClickHandler: null,
     savedFacilityLocation: null,
     useSavedFacilityLocation: false,
     printRange: "month",
@@ -73,6 +77,10 @@
       address,
       dropoffPlace,
       dropoffAddress,
+      manualLat: null,
+      manualLng: null,
+      dropoffManualLat: null,
+      dropoffManualLng: null,
       restDays: normalizeRestDays(restDays),
       restDates: convertRestDaysToDates(restDays, course),
       lat: null,
@@ -96,6 +104,46 @@
     return String(stop.address || stop.displayName || stop.place || "").trim();
   }
 
+  function normalizeCoordinate(value) {
+    const number = Number.parseFloat(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function getManualPinForMode(stop, mode = state.mode) {
+    const routeMode = mode === "dropoff" ? "dropoff" : "pickup";
+    const hasDropoffLocation = Boolean(String(stop.dropoffPlace || stop.dropoffAddress || "").trim());
+    const latKey = routeMode === "dropoff" && hasDropoffLocation ? "dropoffManualLat" : "manualLat";
+    const lngKey = routeMode === "dropoff" && hasDropoffLocation ? "dropoffManualLng" : "manualLng";
+    const lat = normalizeCoordinate(stop[latKey]);
+    const lng = normalizeCoordinate(stop[lngKey]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return null;
+    }
+    return { lat, lng };
+  }
+
+  function setManualPinForMode(stop, mode, lat, lng) {
+    const routeMode = mode === "dropoff" ? "dropoff" : "pickup";
+    if (routeMode === "dropoff") {
+      stop.dropoffManualLat = normalizeCoordinate(lat);
+      stop.dropoffManualLng = normalizeCoordinate(lng);
+      return;
+    }
+    stop.manualLat = normalizeCoordinate(lat);
+    stop.manualLng = normalizeCoordinate(lng);
+  }
+
+  function clearManualPinForMode(stop, mode) {
+    const routeMode = mode === "dropoff" ? "dropoff" : "pickup";
+    if (routeMode === "dropoff") {
+      stop.dropoffManualLat = null;
+      stop.dropoffManualLng = null;
+      return;
+    }
+    stop.manualLat = null;
+    stop.manualLng = null;
+  }
+
   function getRouteStopForMode(stop, mode = state.mode) {
     const routeMode = mode === "dropoff" ? "dropoff" : "pickup";
     const primaryPlace = String(stop.place || "").trim();
@@ -109,7 +157,8 @@
         place: primaryPlace,
         address: primaryAddress,
         originalPlace: primaryPlace,
-        originalAddress: primaryAddress
+        originalAddress: primaryAddress,
+        manualPin: getManualPinForMode(stop, "pickup")
       };
     }
     return {
@@ -118,7 +167,8 @@
       place: dropoffPlace || primaryPlace,
       address: dropoffAddress || primaryAddress,
       originalPlace: primaryPlace,
-      originalAddress: primaryAddress
+      originalAddress: primaryAddress,
+      manualPin: getManualPinForMode(stop, "dropoff")
     };
   }
 
@@ -315,6 +365,10 @@
           address: String(stop.address || "").trim(),
           dropoffPlace: String(stop.dropoffPlace || "").trim(),
           dropoffAddress: String(stop.dropoffAddress || "").trim(),
+          manualLat: normalizeCoordinate(stop.manualLat),
+          manualLng: normalizeCoordinate(stop.manualLng),
+          dropoffManualLat: normalizeCoordinate(stop.dropoffManualLat),
+          dropoffManualLng: normalizeCoordinate(stop.dropoffManualLng),
           restDays: getStopRestDates(stop, course)
             .filter((dateKey) => {
               const date = parseDateKey(dateKey);
@@ -367,6 +421,10 @@
             String(storedStop.dropoffPlace || "").trim(),
             String(storedStop.dropoffAddress || "").trim()
           );
+          stop.manualLat = normalizeCoordinate(storedStop.manualLat);
+          stop.manualLng = normalizeCoordinate(storedStop.manualLng);
+          stop.dropoffManualLat = normalizeCoordinate(storedStop.dropoffManualLat);
+          stop.dropoffManualLng = normalizeCoordinate(storedStop.dropoffManualLng);
           stop.restDates = normalizeRestDates(storedStop.restDates);
           if (stop.restDates.length === 0) {
             stop.restDates = convertRestDaysToDates(storedStop.restDays, course);
@@ -695,6 +753,17 @@
   }
 
   async function geocodeStop(stop) {
+    if (stop.manualPin) {
+      return {
+        lat: stop.manualPin.lat,
+        lng: stop.manualPin.lng,
+        displayName: getStopDisplayName(stop),
+        geocodeQuery: "手動ピン",
+        geocodeSource: "manual-pin",
+        isApproximate: false,
+        isManualPin: true
+      };
+    }
     const queries = buildStopSearchQueries(stop);
     for (let index = 0; index < queries.length; index += 1) {
       if (index > 0) {
@@ -1132,6 +1201,12 @@
     elements.placeholder = document.getElementById("placeholder");
     elements.result = document.getElementById("result");
     elements.resultTitle = document.getElementById("result-title");
+    elements.pinEditor = document.getElementById("pin-editor");
+    elements.pinEditorTitle = document.getElementById("pin-editor-title");
+    elements.pinEditorHelp = document.getElementById("pin-editor-help");
+    elements.savePinPosition = document.getElementById("save-pin-position");
+    elements.resetPinPosition = document.getElementById("reset-pin-position");
+    elements.cancelPinEdit = document.getElementById("cancel-pin-edit");
     elements.summaryStopCount = document.getElementById("summary-stop-count");
     elements.summaryDistance = document.getElementById("summary-distance");
     elements.summaryDuration = document.getElementById("summary-duration");
@@ -1171,6 +1246,9 @@
     elements.importCoursesFile.addEventListener("change", importCoursesFromShareFile);
     elements.modePickup.addEventListener("click", () => setMode("pickup"));
     elements.modeDropoff.addEventListener("click", () => setMode("dropoff"));
+    elements.savePinPosition.addEventListener("click", saveManualPinEdit);
+    elements.resetPinPosition.addEventListener("click", resetManualPinEdit);
+    elements.cancelPinEdit.addEventListener("click", cancelManualPinEdit);
     elements.saveCurrentLocation.addEventListener("click", saveCurrentLocationAsFacility);
     elements.useSavedLocation.addEventListener("click", useSavedFacilityLocation);
     elements.clearSavedLocation.addEventListener("click", clearSavedFacilityLocation);
@@ -1317,6 +1395,7 @@
       state.activeCourseIndex = 0;
       hideFormMessage();
       clearFailedAddresses();
+      clearPinEdit();
       renderCourseTabs();
       renderCourseName();
       renderStops();
@@ -1349,6 +1428,7 @@
     state.activeCourseIndex = index;
     hideFormMessage();
     clearFailedAddresses();
+    clearPinEdit();
     renderCourseTabs();
     renderCourseName();
     renderStops();
@@ -1381,6 +1461,7 @@
     if (!course || !course.lastRoute) {
       return;
     }
+    clearPinEdit();
     course.lastRoute = null;
     elements.placeholder.hidden = false;
     elements.result.hidden = true;
@@ -1719,6 +1800,7 @@
             geocodeQuery: location.geocodeQuery,
             geocodeSource: location.geocodeSource,
             isApproximate: location.isApproximate,
+            isManualPin: Boolean(location.isManualPin),
             matrixIndex: foundStops.length + 1
           });
         } else {
@@ -1811,6 +1893,7 @@
   }
 
   function clearMapLayer() {
+    clearPinEditLayerOnly();
     if (state.map && state.layer) {
       state.map.removeLayer(state.layer);
       state.layer = null;
@@ -1936,7 +2019,8 @@
         {
           routeIndex: index,
           routeCount: ordered.length,
-          label: getRoutePrimaryName(stop)
+          label: getRoutePrimaryName(stop),
+          hasManualPin: Boolean(stop.isManualPin)
         }
       ));
     });
@@ -1967,6 +2051,9 @@
     if (point.isApproximate) {
       parts.push("近似地点");
     }
+    if (point.isManualPin) {
+      parts.push("手動ピン");
+    }
     return parts.join(" ・ ");
   }
 
@@ -1987,6 +2074,9 @@
       </span>
       ${isReorderable ? `
         <span class="route-reorder-controls" aria-label="${escapeHtml(name)}の順番変更">
+          <button type="button" class="route-pin-button${reorderOptions.hasManualPin ? " is-active" : ""}" data-route-index="${reorderOptions.routeIndex}" aria-label="${escapeHtml(name)}のピン位置を修正" title="ピン位置を修正">
+            <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#icon-pin"></use></svg>
+          </button>
           <button type="button" class="route-move-button" data-route-index="${reorderOptions.routeIndex}" data-move="-1"${reorderOptions.routeIndex === 0 ? " disabled" : ""} aria-label="${escapeHtml(name)}を1つ上へ">↑</button>
           <button type="button" class="route-move-button" data-route-index="${reorderOptions.routeIndex}" data-move="1"${reorderOptions.routeIndex === reorderOptions.routeCount - 1 ? " disabled" : ""} aria-label="${escapeHtml(name)}を1つ下へ">↓</button>
           <span class="route-drag-label">ドラッグ</span>
@@ -2038,6 +2128,135 @@
         applyManualRouteMove(route, fromIndex, fromIndex + move);
       });
     });
+    elements.routeList.querySelectorAll(".route-pin-button").forEach((button) => {
+      button.addEventListener("click", () => {
+        const routeIndex = Number.parseInt(button.dataset.routeIndex, 10);
+        startManualPinEdit(route, routeIndex);
+      });
+    });
+  }
+
+  function startManualPinEdit(route, routeIndex) {
+    if (!route || !Array.isArray(route.ordered) || !route.ordered[routeIndex] || !state.map) {
+      return;
+    }
+    const stop = route.ordered[routeIndex];
+    state.pinEdit = {
+      route,
+      routeIndex,
+      stopId: stop.id,
+      mode: route.routeMode === "dropoff" ? "dropoff" : "pickup",
+      label: getRoutePrimaryName(stop),
+      tempLat: stop.lat,
+      tempLng: stop.lng
+    };
+    renderPinEditor();
+    renderPinEditLayer();
+    state.map.setView([stop.lat, stop.lng], Math.max(state.map.getZoom(), 16));
+  }
+
+  function renderPinEditor() {
+    if (!elements.pinEditor || !state.pinEdit) {
+      return;
+    }
+    const modeLabel = state.pinEdit.mode === "dropoff" ? "送り地点" : "迎え地点";
+    elements.pinEditor.hidden = false;
+    elements.pinEditorTitle.textContent = `${state.pinEdit.label}の${modeLabel}を修正中`;
+    updatePinEditorHelp();
+  }
+
+  function updatePinEditorHelp() {
+    if (!elements.pinEditorHelp || !state.pinEdit) {
+      return;
+    }
+    elements.pinEditorHelp.textContent = `地図上で正しい乗降地点をクリック、またはピンをドラッグしてください。現在位置：${state.pinEdit.tempLat.toFixed(6)}, ${state.pinEdit.tempLng.toFixed(6)}`;
+  }
+
+  function renderPinEditLayer() {
+    if (!state.map || !window.L || !state.pinEdit) {
+      return;
+    }
+    clearPinEditLayerOnly();
+    state.pinEditLayer = window.L.layerGroup().addTo(state.map);
+    state.pinEditMarker = window.L.marker([state.pinEdit.tempLat, state.pinEdit.tempLng], {
+      icon: createManualEditIcon(),
+      draggable: true
+    }).addTo(state.pinEditLayer);
+    state.pinEditMarker.bindPopup("このピンを正しい乗降地点へ動かしてください。").openPopup();
+    state.pinEditMarker.on("dragend", (event) => {
+      const latLng = event.target.getLatLng();
+      updatePinEditPosition(latLng.lat, latLng.lng);
+    });
+    state.mapClickHandler = (event) => {
+      updatePinEditPosition(event.latlng.lat, event.latlng.lng);
+    };
+    state.map.on("click", state.mapClickHandler);
+  }
+
+  function updatePinEditPosition(lat, lng) {
+    if (!state.pinEdit) {
+      return;
+    }
+    state.pinEdit.tempLat = lat;
+    state.pinEdit.tempLng = lng;
+    if (state.pinEditMarker) {
+      state.pinEditMarker.setLatLng([lat, lng]);
+    }
+    updatePinEditorHelp();
+  }
+
+  async function saveManualPinEdit() {
+    if (!state.pinEdit) {
+      return;
+    }
+    const course = getActiveCourse();
+    const stop = course.stops.find((candidate) => candidate.id === state.pinEdit.stopId);
+    if (!stop) {
+      cancelManualPinEdit();
+      return;
+    }
+    setManualPinForMode(stop, state.pinEdit.mode, state.pinEdit.tempLat, state.pinEdit.tempLng);
+    clearPinEdit();
+    updateCourseSaveStatus("手動ピンを設定しました。共有・保存する場合は「コース設定を保存」または共有ファイルを書き出してください。");
+    await calculateRoute();
+  }
+
+  async function resetManualPinEdit() {
+    if (!state.pinEdit) {
+      return;
+    }
+    const course = getActiveCourse();
+    const stop = course.stops.find((candidate) => candidate.id === state.pinEdit.stopId);
+    if (stop) {
+      clearManualPinForMode(stop, state.pinEdit.mode);
+    }
+    clearPinEdit();
+    updateCourseSaveStatus("手動ピンを解除しました。住所・場所名から再検索します。");
+    await calculateRoute();
+  }
+
+  function cancelManualPinEdit() {
+    clearPinEdit();
+  }
+
+  function clearPinEdit() {
+    clearPinEditLayerOnly();
+    state.pinEdit = null;
+    if (elements.pinEditor) {
+      elements.pinEditor.hidden = true;
+    }
+  }
+
+  function clearPinEditLayerOnly() {
+    if (state.map && state.mapClickHandler) {
+      state.map.off("click", state.mapClickHandler);
+    }
+    if (state.map && state.pinEditLayer) {
+      state.map.removeLayer(state.pinEditLayer);
+    }
+    state.pinEditLayer = null;
+    state.pinEditMarker = null;
+    state.mapClickHandler = null;
   }
 
   async function applyManualRouteMove(route, fromIndex, toIndex) {
@@ -2228,7 +2447,7 @@
     points.push([facility.lat, facility.lng]);
 
     ordered.forEach((stop, index) => {
-      window.L.marker([stop.lat, stop.lng], { icon: createMarkerIcon(String(index + 1), false) })
+      window.L.marker([stop.lat, stop.lng], { icon: createMarkerIcon(String(index + 1), false, Boolean(stop.isManualPin)) })
         .addTo(state.layer)
         .bindPopup(`${escapeHtml(getStopDisplayName(stop))}<br>${escapeHtml(getStopAddressLabel(stop))}`);
       points.push([stop.lat, stop.lng]);
@@ -2251,15 +2470,27 @@
     }).addTo(state.layer);
 
     state.map.fitBounds(window.L.latLngBounds(linePoints.length ? linePoints : points).pad(0.18));
+    if (state.pinEdit) {
+      renderPinEditLayer();
+    }
     window.setTimeout(() => state.map.invalidateSize(), 120);
   }
 
-  function createMarkerIcon(label, isFacility) {
+  function createMarkerIcon(label, isFacility, isManualPin = false) {
     return window.L.divIcon({
       className: "",
-      html: `<div class="route-marker${isFacility ? " is-facility" : ""}"><span>${escapeHtml(label)}</span></div>`,
+      html: `<div class="route-marker${isFacility ? " is-facility" : ""}${isManualPin ? " is-manual-pin" : ""}"><span>${escapeHtml(label)}</span></div>`,
       iconSize: [31, 31],
       iconAnchor: [15, 15]
+    });
+  }
+
+  function createManualEditIcon() {
+    return window.L.divIcon({
+      className: "",
+      html: "<div class=\"route-marker is-edit-pin\"><span>&#128205;</span></div>",
+      iconSize: [34, 34],
+      iconAnchor: [17, 32]
     });
   }
 
@@ -2732,6 +2963,9 @@
     createInitialCourses,
     buildStopSearchQueries,
     getRouteStopForMode,
+    getManualPinForMode,
+    setManualPinForMode,
+    clearManualPinForMode,
     getStopDisplayName,
     getRoutePrimaryName,
     getRouteDetailLines,
@@ -2760,6 +2994,7 @@
     buildGeocodeCandidates,
     isPlausibleGeocodeHit,
     geocodeAddress,
+    geocodeStop,
     fetchRoadRoute
   };
 

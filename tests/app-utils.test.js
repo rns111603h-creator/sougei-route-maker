@@ -330,6 +330,10 @@ courses[0].stops[0].place = "那覇空港";
 courses[0].stops[0].address = "沖縄県那覇市鏡水150";
 courses[0].stops[0].dropoffPlace = "那覇空港 国内線出入口";
 courses[0].stops[0].dropoffAddress = "沖縄県那覇市鏡水150-1";
+courses[0].stops[0].manualLat = 26.206111;
+courses[0].stops[0].manualLng = 127.650111;
+courses[0].stops[0].dropoffManualLat = 26.206222;
+courses[0].stops[0].dropoffManualLng = 127.650222;
 courses[0].stops[0].restDays = [3, 10];
 courses[0].stops[0].restDates = ["2026-04-03", "2026-04-10", "2026-05-01"];
 courses[0].lastRoute = { shouldNotBeSaved: true };
@@ -343,6 +347,10 @@ assert.strictEqual(savedPayload.courses[0].stops[0].service, undefined);
 assert.strictEqual(savedPayload.courses[0].stops[0].place, "那覇空港");
 assert.strictEqual(savedPayload.courses[0].stops[0].dropoffPlace, "那覇空港 国内線出入口");
 assert.strictEqual(savedPayload.courses[0].stops[0].dropoffAddress, "沖縄県那覇市鏡水150-1");
+assert.strictEqual(savedPayload.courses[0].stops[0].manualLat, 26.206111);
+assert.strictEqual(savedPayload.courses[0].stops[0].manualLng, 127.650111);
+assert.strictEqual(savedPayload.courses[0].stops[0].dropoffManualLat, 26.206222);
+assert.strictEqual(savedPayload.courses[0].stops[0].dropoffManualLng, 127.650222);
 assert.strictEqual(savedPayload.courses[0].stops[0].scheduledTime, undefined);
 assert.strictEqual(JSON.stringify(savedPayload.courses[0].stops[0].restDays), JSON.stringify([3, 10]));
 assert.strictEqual(JSON.stringify(savedPayload.courses[0].stops[0].restDates), JSON.stringify(["2026-04-03", "2026-04-10", "2026-05-01"]));
@@ -360,6 +368,10 @@ assert.strictEqual(restoredCourses[0].stops[0].place, "那覇空港");
 assert.strictEqual(restoredCourses[0].stops[0].address, "沖縄県那覇市鏡水150");
 assert.strictEqual(restoredCourses[0].stops[0].dropoffPlace, "那覇空港 国内線出入口");
 assert.strictEqual(restoredCourses[0].stops[0].dropoffAddress, "沖縄県那覇市鏡水150-1");
+assert.strictEqual(restoredCourses[0].stops[0].manualLat, 26.206111);
+assert.strictEqual(restoredCourses[0].stops[0].manualLng, 127.650111);
+assert.strictEqual(restoredCourses[0].stops[0].dropoffManualLat, 26.206222);
+assert.strictEqual(restoredCourses[0].stops[0].dropoffManualLng, 127.650222);
 assert.strictEqual(restoredCourses[0].stops[0].scheduledTime, undefined);
 assert.strictEqual(JSON.stringify(restoredCourses[0].stops[0].restDays), JSON.stringify([3, 10]));
 assert.strictEqual(JSON.stringify(restoredCourses[0].stops[0].restDates), JSON.stringify(["2026-04-03", "2026-04-10", "2026-05-01"]));
@@ -367,6 +379,8 @@ assert.strictEqual(restoredCourses[0].lastRoute, null);
 assert.strictEqual(utils.getRouteStopForMode(restoredCourses[0].stops[0], "pickup").place, "那覇空港", "pickup routes should use the primary place");
 assert.strictEqual(utils.getRouteStopForMode(restoredCourses[0].stops[0], "dropoff").place, "那覇空港 国内線出入口", "dropoff routes should use the dropoff place when provided");
 assert.strictEqual(utils.getRouteStopForMode(restoredCourses[0].stops[0], "dropoff").address, "沖縄県那覇市鏡水150-1", "dropoff routes should use the dropoff address when provided");
+assert.strictEqual(utils.getManualPinForMode(restoredCourses[0].stops[0], "pickup").lat, 26.206111, "pickup routes should use pickup manual pins when present");
+assert.strictEqual(utils.getManualPinForMode(restoredCourses[0].stops[0], "dropoff").lng, 127.650222, "dropoff routes should use dropoff manual pins when present");
 assert.strictEqual(utils.getPrintPlaceName(restoredCourses[0].stops[0]), "迎：那覇空港 / 送：那覇空港 国内線出入口", "print sheets should show both pickup and dropoff places only when they differ");
 
 const legacyRestoredCourses = utils.hydrateCoursesFromStorage({
@@ -418,6 +432,15 @@ assert.ok(
 
 async function runAsyncUtilityTests() {
   const originalFetch = context.window.fetch;
+
+  context.window.fetch = async () => {
+    throw new Error("manual pin geocoding should not call fetch");
+  };
+  const manualPinLocation = await utils.geocodeStop(utils.getRouteStopForMode(restoredCourses[0].stops[0], "dropoff"));
+  assert.strictEqual(manualPinLocation.lat, 26.206222, "manual dropoff pins should be used as route coordinates");
+  assert.strictEqual(manualPinLocation.lng, 127.650222, "manual dropoff pins should be used as route coordinates");
+  assert.strictEqual(manualPinLocation.geocodeSource, "manual-pin", "manual pins should be marked as manually corrected");
+  assert.strictEqual(manualPinLocation.isManualPin, true, "manual pin locations should be flagged for UI labels");
 
   const geocodeCalls = [];
   context.window.fetch = async (url) => {

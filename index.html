@@ -194,6 +194,17 @@
           <div class="section-kicker"><svg class="icon" width="18" height="18" aria-hidden="true"><use href="#icon-map"></use></svg>計算結果</div>
           <h2 id="result-title">時間優先の送迎ルート</h2>
           <div id="map" aria-label="送迎ルートの地図"></div>
+          <div id="pin-editor" class="pin-editor" role="status" aria-live="polite" hidden>
+            <div>
+              <strong id="pin-editor-title">ピン位置を修正</strong>
+              <p id="pin-editor-help">地図上で正しい乗降地点をクリック、またはピンをドラッグしてください。</p>
+            </div>
+            <div class="pin-editor-actions">
+              <button type="button" id="save-pin-position" class="small-button"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#icon-pin"></use></svg>この位置で保存</button>
+              <button type="button" id="reset-pin-position" class="small-button ghost-button">自動検索に戻す</button>
+              <button type="button" id="cancel-pin-edit" class="small-button ghost-button">やめる</button>
+            </div>
+          </div>
 
           <div class="summary-grid">
             <div class="summary-item">

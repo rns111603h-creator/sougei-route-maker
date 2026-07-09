@@ -965,6 +965,58 @@ input[type="number"]:focus {
   background: transparent;
 }
 
+.route-pin-button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  color: var(--gold-dark);
+  background: #fff;
+  cursor: pointer;
+}
+
+.route-pin-button:hover,
+.route-pin-button.is-active {
+  color: #fff;
+  background: var(--gold);
+}
+
+.pin-editor {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--gold);
+  background: var(--gold-paper);
+}
+
+.pin-editor[hidden] {
+  display: none;
+}
+
+.pin-editor strong {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+}
+
+.pin-editor p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.pin-editor-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 /* ---------- Schedule ---------- */
 
 .schedule-panel {
@@ -1241,6 +1293,19 @@ input[type="number"]:focus {
   font-size: 11px;
 }
 
+.route-marker.is-manual-pin {
+  background: var(--red);
+}
+
+.route-marker.is-edit-pin {
+  width: 34px;
+  height: 34px;
+  color: var(--red);
+  background: #fff;
+  border-color: var(--red);
+  font-size: 18px;
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 900px) {
@@ -1329,6 +1394,15 @@ input[type="number"]:focus {
 
   .rest-days {
     grid-area: rest;
+  }
+
+  .pin-editor {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pin-editor-actions {
+    justify-content: flex-start;
   }
 
   .delete-stop {
